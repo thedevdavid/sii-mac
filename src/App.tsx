@@ -11,7 +11,6 @@ import { ProfileBackups } from "@/features/profiles/profile-backups";
 import type { GameInstallation, ProfileSummary } from "@/lib/types";
 import { useGameDetection } from "@/hooks/use-game-detection";
 import { Settings, MousePointerClick } from "lucide-react";
-import "./App.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

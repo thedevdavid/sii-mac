@@ -127,12 +127,13 @@ export function ProfileOverview({
               Backup
             </Button>
             <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="text-destructive hover:text-destructive">
-                  <Trash2 className="mr-2 size-4" />
-                  Delete
-                </Button>
-              </AlertDialogTrigger>
+                <AlertDialogTrigger render={() => (<Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Delete
+                  </Button>)} />
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Profile</AlertDialogTitle>

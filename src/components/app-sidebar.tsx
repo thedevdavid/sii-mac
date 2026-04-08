@@ -71,8 +71,7 @@ export function AppSidebar({
               <Skeleton className="h-10 w-full rounded-md" />
             ) : (
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
+                <DropdownMenuTrigger render={() => (<SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent"
                   >
@@ -90,8 +89,7 @@ export function AppSidebar({
                       </span>
                     </div>
                     <ChevronsUpDown className="ml-auto size-4" />
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
+                  </SidebarMenuButton>)} />
                 <DropdownMenuContent
                   className="w-[--radix-dropdown-menu-trigger-width] min-w-56"
                   align="start"

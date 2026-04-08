@@ -141,16 +141,14 @@ export function ProfileBackups({
                     </div>
                   </div>
                   <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
+                    <AlertDialogTrigger render={() => (<Button
                         variant="outline"
                         size="sm"
                         disabled={isPending}
                       >
                         <RotateCcw className="mr-1.5 size-3.5" />
                         Restore
-                      </Button>
-                    </AlertDialogTrigger>
+                      </Button>)} />
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Restore Backup</AlertDialogTitle>
@@ -215,16 +213,14 @@ export function ProfileBackups({
                     </div>
                   </div>
                   <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
+                    <AlertDialogTrigger render={() => (<Button
                         variant="outline"
                         size="sm"
                         disabled={isPending}
                       >
                         <RotateCcw className="mr-1.5 size-3.5" />
                         Restore
-                      </Button>
-                    </AlertDialogTrigger>
+                      </Button>)} />
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Restore Backup</AlertDialogTitle>
