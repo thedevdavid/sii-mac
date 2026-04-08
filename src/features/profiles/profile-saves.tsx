@@ -1,8 +1,22 @@
 import { useProfileDetail } from "@/hooks/use-profiles";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/cupertino/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
+import {
+  Empty,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
+import {
+  Item,
+  ItemGroup,
+  ItemMedia,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { IconDeviceFloppy } from "@tabler/icons-react";
+import { revealInFinder } from "@/lib/opener";
 import type { ProfileSummary } from "@/lib/types";
 
 interface ProfileSavesProps {
@@ -14,13 +28,9 @@ export function ProfileSaves({ profile }: ProfileSavesProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-        </div>
+      <div className="space-y-4 p-5">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       </div>
     );
   }
@@ -29,39 +39,44 @@ export function ProfileSaves({ profile }: ProfileSavesProps) {
 
   return (
     <ScrollArea className="h-full">
-      <div className="space-y-4 p-6">
-        <h2 className="text-xl font-semibold">
-          Saves ({detail.saves.length})
+      <div className="space-y-4 p-5">
+        <h2 className="text-sm font-semibold">
+          Saves{" "}
+          <span className="text-muted-foreground">
+            ({detail.saves.length})
+          </span>
         </h2>
         {detail.saves.length === 0 ? (
-          <p className="py-12 text-center text-muted-foreground">
-            No saves found for this profile
-          </p>
+          <Empty>
+            <EmptyMedia>
+              <IconDeviceFloppy className="size-6 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyTitle>No saves found</EmptyTitle>
+            <EmptyDescription>
+              This profile has no save files.
+            </EmptyDescription>
+          </Empty>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ItemGroup>
             {detail.saves.map((save) => (
-              <Card key={save.path}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-2">
-                    <IconDeviceFloppy className="size-4 shrink-0 text-muted-foreground" />
-                    <CardTitle className="truncate text-sm">
-                      {save.name}
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {save.last_modified && (
-                    <p className="text-xs text-muted-foreground">
-                      {save.last_modified}
-                    </p>
-                  )}
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {save.directory_name}
-                  </p>
-                </CardContent>
-              </Card>
+              <Item
+                key={save.path}
+                variant="outline"
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => revealInFinder(save.path)}
+              >
+                <ItemMedia variant="icon">
+                  <IconDeviceFloppy className="size-4 text-muted-foreground" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>{save.name}</ItemTitle>
+                  <ItemDescription>
+                    {save.last_modified ?? save.directory_name}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
             ))}
-          </div>
+          </ItemGroup>
         )}
       </div>
     </ScrollArea>

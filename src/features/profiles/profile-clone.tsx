@@ -3,8 +3,9 @@ import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfileContents, useProfileDetail } from "@/hooks/use-profiles";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/cupertino/card";
+// No Card imports — using section headers + bordered containers (macOS pattern)
 import { Button } from "@/components/cupertino/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/cupertino/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -348,12 +349,11 @@ function CloneForm({
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div className="space-y-5 p-5">
         <div>
-          <h2 className="text-2xl font-bold">Clone Profile</h2>
-          <p className="text-muted-foreground">
-            Create a copy of <strong>{profile.name}</strong>. Select what to
-            include.
+          <h2 className="text-sm font-semibold">Clone Profile</h2>
+          <p className="text-xs text-muted-foreground">
+            Create a copy of {profile.name}. Select what to include.
           </p>
         </div>
 
@@ -363,7 +363,7 @@ function CloneForm({
             e.stopPropagation();
             form.handleSubmit();
           }}
-          className="space-y-6"
+          className="space-y-5"
         >
           {/* Profile name */}
           <form.Field
@@ -404,7 +404,7 @@ function CloneForm({
             children={(field) => (
               <div className="space-y-2">
                 <Label>Preset</Label>
-                <div className="flex flex-wrap gap-2">
+                <ButtonGroup>
                   {(
                     Object.entries(PRESET_LABELS) as [ClonePreset, string][]
                   ).map(([key, label]) => (
@@ -419,7 +419,7 @@ function CloneForm({
                       {label}
                     </Button>
                   ))}
-                </div>
+                </ButtonGroup>
                 <p className="text-xs text-muted-foreground">
                   {PRESET_DESCRIPTIONS[field.state.value]}
                 </p>
@@ -471,41 +471,39 @@ function CloneForm({
 
               return (
                 <>
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
-                          Select Components
-                        </CardTitle>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => applyPreset("complete")}
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              form.setFieldValue("selectedFiles", []);
-                              form.setFieldValue("selectedDirs", []);
-                              form.setFieldValue("selectedSaves", []);
-                              form.setFieldValue("selectedMods", []);
-                              form.setFieldValue("filterMods", true);
-                              form.setFieldValue("includeOnlineProfile", false);
-                              markCustom();
-                            }}
-                          >
-                            Clear All
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-1 pt-0">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Components
+                      </h3>
+                      <ButtonGroup>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => applyPreset("complete")}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => {
+                            form.setFieldValue("selectedFiles", []);
+                            form.setFieldValue("selectedDirs", []);
+                            form.setFieldValue("selectedSaves", []);
+                            form.setFieldValue("selectedMods", []);
+                            form.setFieldValue("filterMods", true);
+                            form.setFieldValue("includeOnlineProfile", false);
+                            markCustom();
+                          }}
+                        >
+                          Clear All
+                        </Button>
+                      </ButtonGroup>
+                    </div>
+                    <div className="space-y-1 rounded-lg border p-2">
                       {/* Required (always included) */}
                       <GroupRow
                         icon={<IconLock className="size-3.5" />}
@@ -761,8 +759,8 @@ function CloneForm({
                           </p>
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
 
                   {/* Summary + submit */}
                   <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
@@ -812,9 +810,9 @@ export function ProfileClone({ profile, installation }: ProfileCloneProps) {
 
   if (contentsLoading || !contents) {
     return (
-      <div className="space-y-6 p-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 max-w-2xl" />
+      <div className="space-y-5 p-5">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-64 w-full rounded-lg" />
       </div>
     );
   }

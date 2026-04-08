@@ -2,34 +2,26 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useProfileDetail } from "@/hooks/use-profiles";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/cupertino/card";
 import { Button } from "@/components/cupertino/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/cupertino/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
-  IconCurrencyDollar,
-  IconStar,
+  Item,
+  ItemGroup,
+  ItemMedia,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+  ItemActions,
+} from "@/components/ui/item";
+import {
   IconDeviceFloppy,
-  IconClock,
   IconArchive,
   IconCopy,
   IconTrash,
-  IconRoad,
-  IconTruck,
-  IconMap,
-  IconVersions,
   IconPuzzle,
-  IconUser,
-  IconWorld,
-  IconCalendar,
 } from "@tabler/icons-react";
 import {
   AlertDialog,
@@ -42,19 +34,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/cupertino/alert-dialog";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { deleteProfile, backupProfile } from "@/lib/tauri-commands";
+import { revealInFinder, openModLink } from "@/lib/opener";
 import type { ProfileSummary, GameInstallation } from "@/lib/types";
-import type { View } from "@/components/app-sidebar";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface ProfileOverviewProps {
   profile: ProfileSummary;
   installation: GameInstallation;
   onProfileDeleted: () => void;
-  onNavigate: (view: View) => void;
 }
 
-function formatDistance(distance: number | null | undefined, mapPath: string | null | undefined): string {
+function formatDistance(
+  distance: number | null | undefined,
+  mapPath: string | null | undefined,
+): string {
   if (distance == null) return "—";
   const isUSA = mapPath?.includes("usa");
   const unit = isUSA ? "mi" : "km";
@@ -63,9 +59,7 @@ function formatDistance(distance: number | null | undefined, mapPath: string | n
 
 function formatBrand(brand: string | undefined): string {
   if (!brand) return "—";
-  return brand
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return brand.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatTimestamp(ts: number | undefined): string {
@@ -73,11 +67,39 @@ function formatTimestamp(ts: number | undefined): string {
   return format(new Date(ts * 1000), "PPp");
 }
 
+function SectionHeader({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <h3
+      className={`text-xs font-medium uppercase tracking-wider text-muted-foreground ${className ?? ""}`}
+    >
+      {children}
+    </h3>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Item variant="outline">
+      <ItemContent>
+        <ItemTitle>{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions>
+        <span className="text-sm font-medium">{value ?? "—"}</span>
+      </ItemActions>
+    </Item>
+  );
+}
+
 export function ProfileOverview({
   profile,
   installation,
   onProfileDeleted,
-  onNavigate,
 }: ProfileOverviewProps) {
   const { data: detail, isLoading } = useProfileDetail(profile.path);
   const queryClient = useQueryClient();
@@ -113,14 +135,10 @@ export function ProfileOverview({
 
   if (isLoading) {
     return (
-      <div className="space-y-6 p-6">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
+      <div className="space-y-5 p-5">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-40 w-full rounded-lg" />
       </div>
     );
   }
@@ -131,38 +149,44 @@ export function ProfileOverview({
 
   return (
     <ScrollArea className="h-full">
-      <div className="space-y-6 p-6">
+      <div className="space-y-5 p-5">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">{detail.name}</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-semibold">{detail.name}</h2>
             {detail.company_name && (
-              <p className="text-muted-foreground">{detail.company_name}</p>
+              <span className="text-xs text-muted-foreground">
+                {detail.company_name}
+              </span>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onNavigate("clone")}>
-              <IconCopy className="mr-2 size-4" />
-              Clone
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleBackup}
-              disabled={isPending}
-            >
-              <IconArchive className="mr-2 size-4" />
-              Backup
-            </Button>
+          <div className="flex items-center gap-2">
+            <ButtonGroup>
+              <Button variant="outline" size="sm" render={<Link to="/clone" />}>
+                <IconCopy className="size-3.5" />
+                Clone
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBackup}
+                disabled={isPending}
+              >
+                <IconArchive className="size-3.5" />
+                Backup
+              </Button>
+            </ButtonGroup>
             <AlertDialog>
               <AlertDialogTrigger
                 render={
                   <Button
                     variant="outline"
+                    size="sm"
                     className="text-destructive hover:text-destructive"
                   />
                 }
               >
-                <IconTrash className="mr-2 size-4" />
+                <IconTrash className="size-3.5" />
                 Delete
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -171,7 +195,6 @@ export function ProfileOverview({
                   <AlertDialogDescription>
                     Are you sure you want to delete &quot;{detail.name}&quot;?
                     This will permanently remove the profile and all its saves.
-                    This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -188,197 +211,89 @@ export function ProfileOverview({
           </div>
         </div>
 
-        {/* Primary stat cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {detail.money != null && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Money</CardDescription>
-                <IconCurrencyDollar className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  ${detail.money.toLocaleString()}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-          {(detail.cached_experience ?? detail.experience_points) != null && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Experience</CardDescription>
-                <IconStar className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {(
-                    detail.cached_experience ?? detail.experience_points
-                  )?.toLocaleString()}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardDescription>Saves</CardDescription>
-              <IconDeviceFloppy className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{detail.save_count}</p>
-            </CardContent>
-          </Card>
-          {detail.cached_distance != null && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Distance</CardDescription>
-                <IconRoad className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {formatDistance(detail.cached_distance, detail.map_path)}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+        {/* Profile Stats */}
+        <div className="space-y-2">
+          <SectionHeader>Profile Stats</SectionHeader>
+          <ItemGroup>
+            {detail.money != null && (
+              <StatRow
+                label="Money"
+                value={`$${detail.money.toLocaleString()}`}
+              />
+            )}
+            {(detail.cached_experience ?? detail.experience_points) != null && (
+              <StatRow
+                label="Experience"
+                value={(
+                  detail.cached_experience ?? detail.experience_points
+                )?.toLocaleString()}
+              />
+            )}
+            <StatRow label="Saves" value={detail.save_count} />
+            {detail.cached_distance != null && (
+              <StatRow
+                label="Distance"
+                value={formatDistance(
+                  detail.cached_distance,
+                  detail.map_path,
+                )}
+              />
+            )}
+          </ItemGroup>
         </div>
 
-        {/* Secondary info cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {detail.brand && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Truck Brand</CardDescription>
-                <IconTruck className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold">
-                  {formatBrand(detail.brand)}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-          {detail.map_path && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Map</CardDescription>
-                <IconMap className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold">
-                  {detail.map_path.includes("usa") ? "USA" : "Europe"}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-          {detail.version != null && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Profile Version</CardDescription>
-                <IconVersions className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold">v{detail.version}</p>
-              </CardContent>
-            </Card>
-          )}
-          {detail.last_modified && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>Last Modified</CardDescription>
-                <IconClock className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold">
-                  {detail.last_modified.split(" ")[0]}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {detail.last_modified.split(" ")[1]}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+        {/* Vehicle & Map Info */}
+        <div className="space-y-2">
+          <SectionHeader>Vehicle & Map</SectionHeader>
+          <ItemGroup>
+            {detail.brand && (
+              <StatRow label="Truck Brand" value={formatBrand(detail.brand)} />
+            )}
+            {detail.map_path && (
+              <StatRow
+                label="Map"
+                value={detail.map_path.includes("usa") ? "USA" : "Europe"}
+              />
+            )}
+            {detail.version != null && (
+              <StatRow label="Profile Version" value={`v${detail.version}`} />
+            )}
+            {detail.last_modified && (
+              <StatRow label="Last Modified" value={detail.last_modified} />
+            )}
+          </ItemGroup>
         </div>
 
-        {/* Profile info section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Profile Info</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="flex items-center gap-3">
-                <IconUser className="size-4 text-muted-foreground" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Gender</p>
-                  <p className="text-sm font-medium">
-                    {detail.male != null
-                      ? detail.male
-                        ? "Male"
-                        : "Female"
-                      : "—"}
-                  </p>
-                </div>
-              </div>
-              {detail.logo && (
-                <div className="flex items-center gap-3">
-                  <IconStar className="size-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Company Logo
-                    </p>
-                    <p className="text-sm font-medium">
-                      {detail.logo.replace(/_/g, " ")}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {detail.face != null && (
-                <div className="flex items-center gap-3">
-                  <IconUser className="size-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Face</p>
-                    <p className="text-sm font-medium">#{detail.face}</p>
-                  </div>
-                </div>
-              )}
-              {detail.online_user_name && (
-                <div className="flex items-center gap-3">
-                  <IconWorld className="size-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      World of Trucks
-                    </p>
-                    <p className="text-sm font-medium">
-                      {detail.online_user_name}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {detail.creation_time != null && (
-                <div className="flex items-center gap-3">
-                  <IconCalendar className="size-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Created</p>
-                    <p className="text-sm font-medium">
-                      {formatTimestamp(detail.creation_time)}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {modCount > 0 && (
-                <div className="flex items-center gap-3">
-                  <IconPuzzle className="size-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Active Mods</p>
-                    <p className="text-sm font-medium">
-                      {modCount} mod{modCount !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Profile Details */}
+        <div className="space-y-2">
+          <SectionHeader>Profile Details</SectionHeader>
+          <ItemGroup>
+            {detail.male != null && (
+              <StatRow
+                label="Gender"
+                value={detail.male ? "Male" : "Female"}
+              />
+            )}
+            {detail.online_user_name && (
+              <StatRow
+                label="World of Trucks"
+                value={detail.online_user_name}
+              />
+            )}
+            {detail.creation_time != null && (
+              <StatRow
+                label="Created"
+                value={formatTimestamp(detail.creation_time)}
+              />
+            )}
+            {modCount > 0 && (
+              <StatRow
+                label="Active Mods"
+                value={`${modCount} mod${modCount !== 1 ? "s" : ""}`}
+              />
+            )}
+          </ItemGroup>
+        </div>
 
         {/* Tabs: Recent Saves, Mods, Raw */}
         <Tabs defaultValue="recent-saves">
@@ -387,92 +302,86 @@ export function ProfileOverview({
             {modCount > 0 && (
               <TabsTrigger value="mods">
                 Mods
-                <Badge variant="secondary" className="ml-1.5 text-xs">
+                <Badge variant="secondary" className="ml-1.5">
                   {modCount}
                 </Badge>
               </TabsTrigger>
             )}
             <TabsTrigger value="raw">Raw Profile Data</TabsTrigger>
           </TabsList>
+
           <TabsContent value="recent-saves" className="mt-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {detail.saves.slice(0, 9).map((save) => (
-                <Card key={save.path}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center gap-2">
-                      <IconDeviceFloppy className="size-4 shrink-0 text-muted-foreground" />
-                      <CardTitle className="truncate text-sm">
-                        {save.name}
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  {save.last_modified && (
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground">
-                        {save.last_modified}
-                      </p>
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
+            {detail.saves.length > 0 ? (
+              <ItemGroup>
+                {detail.saves.slice(0, 9).map((save) => (
+                  <Item
+                    key={save.path}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => revealInFinder(save.path)}
+                  >
+                    <ItemMedia variant="icon">
+                      <IconDeviceFloppy className="size-4 text-muted-foreground" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{save.name}</ItemTitle>
+                      {save.last_modified && (
+                        <ItemDescription>{save.last_modified}</ItemDescription>
+                      )}
+                    </ItemContent>
+                  </Item>
+                ))}
+              </ItemGroup>
+            ) : (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                No saves found for this profile
+              </p>
+            )}
             {detail.saves.length > 9 && (
               <Button
                 variant="link"
                 className="mt-3"
-                onClick={() => onNavigate("saves")}
+                render={<Link to="/saves" />}
               >
                 View all {detail.saves.length} saves
               </Button>
             )}
-            {detail.saves.length === 0 && (
-              <p className="py-8 text-center text-muted-foreground">
-                No saves found for this profile
-              </p>
-            )}
           </TabsContent>
+
           {modCount > 0 && (
             <TabsContent value="mods" className="mt-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {detail.active_mods?.map((mod) => (
-                      <div
-                        key={mod.id}
-                        className="flex items-center gap-2 rounded-md border px-3 py-2"
-                      >
-                        <IconPuzzle className="size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {mod.display_name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {mod.id}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <ItemGroup>
+                {detail.active_mods?.map((mod) => (
+                  <Item
+                    key={mod.id}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => openModLink(mod.id, installation.base_path)}
+                  >
+                    <ItemMedia variant="icon">
+                      <IconPuzzle className="size-4 text-muted-foreground" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{mod.display_name}</ItemTitle>
+                      <ItemDescription>{mod.id}</ItemDescription>
+                    </ItemContent>
+                  </Item>
+                ))}
+              </ItemGroup>
             </TabsContent>
           )}
+
           <TabsContent value="raw" className="mt-4">
-            <Card>
-              <CardContent className="pt-6">
-                {detail.raw_profile_text ? (
-                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-xs">
-                    {detail.raw_profile_text.slice(0, 5000)}
-                    {detail.raw_profile_text.length > 5000 &&
-                      "\n\n... truncated"}
-                  </pre>
-                ) : (
-                  <p className="py-8 text-center text-muted-foreground">
-                    Could not decode profile data
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            {detail.raw_profile_text ? (
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 font-mono text-xs">
+                {detail.raw_profile_text.slice(0, 5000)}
+                {detail.raw_profile_text.length > 5000 && "\n\n... truncated"}
+              </pre>
+            ) : (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                Could not decode profile data
+              </p>
+            )}
           </TabsContent>
         </Tabs>
       </div>

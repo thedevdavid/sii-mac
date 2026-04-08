@@ -1,11 +1,25 @@
 import { useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/cupertino/card";
 import { Button } from "@/components/cupertino/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
+import {
+  Item,
+  ItemGroup,
+  ItemMedia,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+  ItemActions,
+} from "@/components/ui/item";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +35,6 @@ import {
   IconArchive,
   IconRotate,
   IconPlus,
-  IconClock,
   IconLoader2,
 } from "@tabler/icons-react";
 import {
@@ -29,6 +42,7 @@ import {
   backupProfile,
   restoreBackup,
 } from "@/lib/tauri-commands";
+import { revealInFinder } from "@/lib/opener";
 import type { ProfileSummary, GameInstallation } from "@/lib/types";
 
 interface ProfileBackupsProps {
@@ -48,7 +62,6 @@ export function ProfileBackups({
     queryFn: () => listBackups(),
   });
 
-  // Filter backups to this profile
   const profileBackups = backups?.filter(
     (b) => b.profile_name === profile.name,
   );
@@ -90,162 +103,149 @@ export function ProfileBackups({
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
+      <div className="space-y-4 p-5">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       </div>
+    );
+  }
+
+  function RestoreDialog({
+    backupPath,
+    backupName,
+  }: {
+    backupPath: string;
+    backupName: string;
+  }) {
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button variant="ghost" size="sm" disabled={isPending} />
+          }
+        >
+          <IconRotate className="size-3.5" />
+          Restore
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore Backup</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will create a new profile from this backup. If a profile with
+              the same name already exists, the restore will fail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleRestore(backupPath, backupName)}
+            >
+              Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     );
   }
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">Backups</h2>
-            <p className="text-muted-foreground">
-              Create and restore profile backups for{" "}
-              <strong>{profile.name}</strong>.
-            </p>
-          </div>
-          <Button onClick={handleCreateBackup} disabled={isPending}>
+      <div className="space-y-5 p-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Backups</h2>
+          <Button size="sm" onClick={handleCreateBackup} disabled={isPending}>
             {isPending ? (
-              <IconLoader2 className="mr-2 size-4 animate-spin" />
+              <IconLoader2 className="size-3.5 animate-spin" />
             ) : (
-              <IconPlus className="mr-2 size-4" />
+              <IconPlus className="size-3.5" />
             )}
             Create Backup
           </Button>
         </div>
 
         {/* Current profile backups */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Backups for this profile
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Current Profile
           </h3>
           {profileBackups && profileBackups.length > 0 ? (
-            profileBackups.map((backup) => (
-              <Card key={backup.path}>
-                <CardContent className="flex items-center justify-between pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-                      <IconArchive className="size-5" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{backup.profile_name}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <IconClock className="size-3" />
-                        {formatDate(backup.created_at)}
-                      </div>
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger render={<Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                      />}>
-                        <IconRotate className="mr-1.5 size-3.5" />
-                        Restore
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Restore Backup</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will create a new profile from this backup. If a
-                          profile with the same name already exists, the restore
-                          will fail. You can rename or delete the existing
-                          profile first.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() =>
-                            handleRestore(backup.path, backup.profile_name)
-                          }
-                        >
-                          Restore
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </CardContent>
-              </Card>
-            ))
+            <ItemGroup>
+              {profileBackups.map((backup) => (
+                <Item
+                  key={backup.path}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => revealInFinder(backup.path)}
+                >
+                  <ItemMedia variant="icon">
+                    <IconArchive className="size-4 text-muted-foreground" />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{backup.profile_name}</ItemTitle>
+                    <ItemDescription>
+                      {formatDate(backup.created_at)}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <RestoreDialog
+                      backupPath={backup.path}
+                      backupName={backup.profile_name}
+                    />
+                  </ItemActions>
+                </Item>
+              ))}
+            </ItemGroup>
           ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-3 py-8">
-                <IconArchive className="size-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  No backups yet. Create one to protect your progress.
-                </p>
-              </CardContent>
-            </Card>
+            <Empty>
+              <EmptyMedia>
+                <IconArchive className="size-6 text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyTitle>No backups yet</EmptyTitle>
+              <EmptyDescription>
+                Create a backup to protect your progress.
+              </EmptyDescription>
+            </Empty>
           )}
         </div>
 
         {/* Other profile backups */}
         {otherBackups && otherBackups.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              Other profile backups
+          <div className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Other Profiles
             </h3>
-            {otherBackups.map((backup) => (
-              <Card key={backup.path} className="opacity-75">
-                <CardContent className="flex items-center justify-between pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-                      <IconArchive className="size-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{backup.profile_name}</p>
-                        <Badge variant="outline" className="text-xs">
-                          Other profile
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <IconClock className="size-3" />
-                        {formatDate(backup.created_at)}
-                      </div>
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                      />}>
-                        <IconRotate className="mr-1.5 size-3.5" />
-                        Restore
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Restore Backup</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will create a new profile named "
-                          {backup.profile_name}" from this backup. If that
-                          profile already exists, the restore will fail.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() =>
-                            handleRestore(backup.path, backup.profile_name)
-                          }
-                        >
-                          Restore
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </CardContent>
-              </Card>
-            ))}
+            <ItemGroup>
+              {otherBackups.map((backup) => (
+                <Item
+                  key={backup.path}
+                  variant="outline"
+                  className="cursor-pointer opacity-75 hover:bg-muted/50"
+                  onClick={() => revealInFinder(backup.path)}
+                >
+                  <ItemMedia variant="icon">
+                    <IconArchive className="size-4 text-muted-foreground" />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>
+                      {backup.profile_name}
+                      <Badge variant="outline" className="ml-2">
+                        Other
+                      </Badge>
+                    </ItemTitle>
+                    <ItemDescription>
+                      {formatDate(backup.created_at)}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <RestoreDialog
+                      backupPath={backup.path}
+                      backupName={backup.profile_name}
+                    />
+                  </ItemActions>
+                </Item>
+              ))}
+            </ItemGroup>
           </div>
         )}
       </div>

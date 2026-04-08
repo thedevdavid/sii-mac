@@ -17,6 +17,7 @@
     "@tanstack/react-form": "^1.28.6",
     "@tanstack/react-form-devtools": "^0.2.20",
     "@tanstack/react-query": "^5.96.2",
+    "@tanstack/react-router": "^1.168.10",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-fs": "^2.5.0",
@@ -44,6 +45,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@tanstack/router-plugin": "^1.167.12",
     "@tauri-apps/cli": "^2",
     "@types/node": "^25.5.2",
     "@types/react": "^19.1.8",

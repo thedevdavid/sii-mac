@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useGameDetection } from "@/hooks/use-game-detection";
 import { useProfiles } from "@/hooks/use-profiles";
 import { gameShortName, gameDisplayName } from "@/lib/types";
@@ -35,15 +36,11 @@ import {
 } from "@tabler/icons-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type View = "overview" | "saves" | "clone" | "backups" | "settings";
-
 interface AppSidebarProps {
   selectedInstallation: GameInstallation | null;
   onSelectInstallation: (installation: GameInstallation) => void;
   selectedProfile: ProfileSummary | null;
   onSelectProfile: (profile: ProfileSummary | null) => void;
-  activeView: View;
-  onViewChange: (view: View) => void;
 }
 
 export function AppSidebar({
@@ -51,14 +48,13 @@ export function AppSidebar({
   onSelectInstallation,
   selectedProfile,
   onSelectProfile,
-  activeView,
-  onViewChange,
 }: AppSidebarProps) {
   const { data: installations, isLoading: detectingGames } =
     useGameDetection();
   const { data: profiles } = useProfiles(
     selectedInstallation?.profiles_path,
   );
+  const location = useLocation();
 
   const hasProfile = !!selectedProfile;
 
@@ -109,7 +105,6 @@ export function AppSidebar({
                                 onClick={() => {
                                   onSelectInstallation(inst);
                                   onSelectProfile(profile);
-                                  onViewChange("overview");
                                 }}
                               >
                                 <span className="truncate">
@@ -161,9 +156,9 @@ export function AppSidebar({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activeView === "overview"}
-                  onClick={() => onViewChange("overview")}
+                  isActive={location.pathname === "/overview"}
                   disabled={!hasProfile}
+                  render={<Link to="/overview" />}
                 >
                   <IconLayoutDashboard className="size-4" />
                   <span>Overview</span>
@@ -171,9 +166,9 @@ export function AppSidebar({
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activeView === "saves"}
-                  onClick={() => onViewChange("saves")}
+                  isActive={location.pathname === "/saves"}
                   disabled={!hasProfile}
+                  render={<Link to="/saves" />}
                 >
                   <IconDeviceFloppy className="size-4" />
                   <span>Saves</span>
@@ -181,9 +176,9 @@ export function AppSidebar({
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activeView === "clone"}
-                  onClick={() => onViewChange("clone")}
+                  isActive={location.pathname === "/clone"}
                   disabled={!hasProfile}
+                  render={<Link to="/clone" />}
                 >
                   <IconCopy className="size-4" />
                   <span>Clone Profile</span>
@@ -191,9 +186,9 @@ export function AppSidebar({
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activeView === "backups"}
-                  onClick={() => onViewChange("backups")}
+                  isActive={location.pathname === "/backups"}
                   disabled={!hasProfile}
+                  render={<Link to="/backups" />}
                 >
                   <IconArchive className="size-4" />
                   <span>Backups</span>
@@ -209,8 +204,8 @@ export function AppSidebar({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={activeView === "settings"}
-                  onClick={() => onViewChange("settings")}
+                  isActive={location.pathname === "/settings"}
+                  render={<Link to="/settings" />}
                 >
                   <IconSettings className="size-4" />
                   <span>Settings</span>
