@@ -1,50 +1,152 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import { AppSidebar, type View } from "@/components/app-sidebar";
+import { ProfileOverview } from "@/features/profiles/profile-overview";
+import { ProfileSaves } from "@/features/profiles/profile-saves";
+import { ProfileClone } from "@/features/profiles/profile-clone";
+import { ProfileBackups } from "@/features/profiles/profile-backups";
+import type { GameInstallation, ProfileSummary } from "@/lib/types";
+import { useGameDetection } from "@/hooks/use-game-detection";
+import { Settings, MousePointerClick } from "lucide-react";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+const VIEW_LABELS: Record<View, string> = {
+  overview: "Overview",
+  saves: "Saves",
+  clone: "Clone Profile",
+  backups: "Backups",
+  settings: "Settings",
+};
+
+function EmptyState() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-12">
+      <div className="flex size-16 items-center justify-center rounded-full bg-muted">
+        <MousePointerClick className="size-7 text-muted-foreground" />
+      </div>
+      <h2 className="text-lg font-semibold">No profile selected</h2>
+      <p className="max-w-sm text-center text-sm text-muted-foreground">
+        Use the profile switcher in the top-left corner to select a game and
+        profile. All actions require an active profile.
+      </p>
+    </div>
+  );
+}
+
+function AppContent() {
+  const { data: installations } = useGameDetection();
+  const [selectedInstallation, setSelectedInstallation] =
+    React.useState<GameInstallation | null>(null);
+  const [selectedProfile, setSelectedProfile] =
+    React.useState<ProfileSummary | null>(null);
+  const [activeView, setActiveView] = React.useState<View>("overview");
+
+  // Auto-select first installation when detected
+  const firstInstallation = installations?.[0];
+  if (firstInstallation && !selectedInstallation) {
+    setSelectedInstallation(firstInstallation);
+  }
+
+  function handleProfileDeleted() {
+    setSelectedProfile(null);
+    setActiveView("overview");
+  }
+
+  function renderContent() {
+    // No profile selected — show empty state for profile-scoped views
+    if (!selectedProfile || !selectedInstallation) {
+      if (activeView === "settings") {
+        return (
+          <div className="flex flex-col items-center justify-center gap-4 p-12">
+            <Settings className="size-12 text-muted-foreground" />
+            <p className="text-lg text-muted-foreground">Settings</p>
+            <p className="text-sm text-muted-foreground">Coming soon</p>
+          </div>
+        );
+      }
+      return <EmptyState />;
+    }
+
+    switch (activeView) {
+      case "overview":
+        return (
+          <ProfileOverview
+            profile={selectedProfile}
+            installation={selectedInstallation}
+            onProfileDeleted={handleProfileDeleted}
+            onNavigate={setActiveView}
+          />
+        );
+      case "saves":
+        return <ProfileSaves profile={selectedProfile} />;
+      case "clone":
+        return (
+          <ProfileClone
+            profile={selectedProfile}
+            installation={selectedInstallation}
+          />
+        );
+      case "backups":
+        return (
+          <ProfileBackups
+            profile={selectedProfile}
+            installation={selectedInstallation}
+          />
+        );
+      case "settings":
+        return (
+          <div className="flex flex-col items-center justify-center gap-4 p-12">
+            <Settings className="size-12 text-muted-foreground" />
+            <p className="text-lg text-muted-foreground">Settings</p>
+            <p className="text-sm text-muted-foreground">Coming soon</p>
+          </div>
+        );
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <SidebarProvider>
+      <AppSidebar
+        selectedInstallation={selectedInstallation}
+        onSelectInstallation={setSelectedInstallation}
+        selectedProfile={selectedProfile}
+        onSelectProfile={setSelectedProfile}
+        activeView={activeView}
+        onViewChange={setActiveView}
+      />
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex h-12 items-center border-b px-4">
+          <SidebarTrigger />
+          <h1 className="ml-2 text-sm font-medium">
+            {VIEW_LABELS[activeView]}
+          </h1>
+        </header>
+        <div className="flex-1 overflow-hidden">{renderContent()}</div>
+      </main>
+    </SidebarProvider>
+  );
+}
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AppContent />
+        <Toaster position="bottom-right" />
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 

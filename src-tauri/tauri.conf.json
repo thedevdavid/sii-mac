@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sii-mac",
+  "productName": "SII Mac",
   "version": "0.1.0",
   "identifier": "com.thedevdavid.sii-mac",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "sii-mac",
-        "width": 800,
-        "height": 600
+        "title": "SII Mac",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 800,
+        "minHeight": 600
       }
     ],
     "security": {
