@@ -1,10 +1,10 @@
 import { useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/cupertino/card";
+import { Button } from "@/components/cupertino/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -16,14 +16,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/cupertino/alert-dialog";
 import {
-  Archive,
-  RotateCcw,
-  Plus,
-  Clock,
-  Loader2,
-} from "lucide-react";
+  IconArchive,
+  IconRotate,
+  IconPlus,
+  IconClock,
+  IconLoader2,
+} from "@tabler/icons-react";
 import {
   listBackups,
   backupProfile,
@@ -111,9 +111,9 @@ export function ProfileBackups({
           </div>
           <Button onClick={handleCreateBackup} disabled={isPending}>
             {isPending ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <IconLoader2 className="mr-2 size-4 animate-spin" />
             ) : (
-              <Plus className="mr-2 size-4" />
+              <IconPlus className="mr-2 size-4" />
             )}
             Create Backup
           </Button>
@@ -130,25 +130,25 @@ export function ProfileBackups({
                 <CardContent className="flex items-center justify-between pt-6">
                   <div className="flex items-center gap-3">
                     <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-                      <Archive className="size-5" />
+                      <IconArchive className="size-5" />
                     </div>
                     <div>
                       <p className="font-medium">{backup.profile_name}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="size-3" />
+                        <IconClock className="size-3" />
                         {formatDate(backup.created_at)}
                       </div>
                     </div>
                   </div>
                   <AlertDialog>
-                    <AlertDialogTrigger render={() => (<Button
+                    <AlertDialogTrigger render={<Button
                         variant="outline"
                         size="sm"
                         disabled={isPending}
-                      >
-                        <RotateCcw className="mr-1.5 size-3.5" />
+                      />}>
+                        <IconRotate className="mr-1.5 size-3.5" />
                         Restore
-                      </Button>)} />
+                    </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Restore Backup</AlertDialogTitle>
@@ -177,7 +177,7 @@ export function ProfileBackups({
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center gap-3 py-8">
-                <Archive className="size-8 text-muted-foreground" />
+                <IconArchive className="size-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
                   No backups yet. Create one to protect your progress.
                 </p>
@@ -197,7 +197,7 @@ export function ProfileBackups({
                 <CardContent className="flex items-center justify-between pt-6">
                   <div className="flex items-center gap-3">
                     <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-                      <Archive className="size-5" />
+                      <IconArchive className="size-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -207,20 +207,21 @@ export function ProfileBackups({
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="size-3" />
+                        <IconClock className="size-3" />
                         {formatDate(backup.created_at)}
                       </div>
                     </div>
                   </div>
                   <AlertDialog>
-                    <AlertDialogTrigger render={() => (<Button
+                    <AlertDialogTrigger render={
+                      <Button
                         variant="outline"
                         size="sm"
                         disabled={isPending}
-                      >
-                        <RotateCcw className="mr-1.5 size-3.5" />
+                      />}>
+                        <IconRotate className="mr-1.5 size-3.5" />
                         Restore
-                      </Button>)} />
+                    </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Restore Backup</AlertDialogTitle>

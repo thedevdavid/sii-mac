@@ -1,8 +1,8 @@
 import { useProfileDetail } from "@/hooks/use-profiles";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/cupertino/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Save } from "lucide-react";
+import { ScrollArea } from "@/components/cupertino/scroll-area";
+import { IconDeviceFloppy } from "@tabler/icons-react";
 import type { ProfileSummary } from "@/lib/types";
 
 interface ProfileSavesProps {
@@ -43,7 +43,7 @@ export function ProfileSaves({ profile }: ProfileSavesProps) {
               <Card key={save.path}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <Save className="size-4 shrink-0 text-muted-foreground" />
+                    <IconDeviceFloppy className="size-4 shrink-0 text-muted-foreground" />
                     <CardTitle className="truncate text-sm">
                       {save.name}
                     </CardTitle>

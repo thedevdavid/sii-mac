@@ -3,6 +3,19 @@ mod error;
 mod profile;
 mod sii;
 
+#[tauri::command]
+fn set_native_vibrancy(window: tauri::Window, enabled: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, clear_vibrancy, NSVisualEffectMaterial};
+        if enabled {
+            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+        } else {
+            let _ = clear_vibrancy(&window);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -16,6 +29,7 @@ pub fn run() {
             commands::profiles::detect_game_installations,
             commands::profiles::list_profiles,
             commands::profiles::get_profile_detail,
+            commands::profiles::scan_profile_contents,
             commands::profiles::clone_profile,
             commands::profiles::rename_profile,
             commands::profiles::delete_profile,
@@ -23,6 +37,7 @@ pub fn run() {
             commands::backup::backup_profile,
             commands::backup::list_backups,
             commands::backup::restore_backup,
+            set_native_vibrancy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

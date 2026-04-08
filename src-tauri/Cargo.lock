@@ -3574,6 +3574,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-store",
  "thiserror 2.0.18",
+ "window-vibrancy",
 ]
 
 [[package]]

@@ -1,7 +1,9 @@
 use crate::error::AppError;
 use crate::profile::detection;
 use crate::profile::manager;
-use crate::profile::models::{CloneOptions, GameInstallation, ProfileDetail, ProfileSummary};
+use crate::profile::models::{
+    CloneOptions, GameInstallation, ProfileContents, ProfileDetail, ProfileSummary,
+};
 
 #[tauri::command]
 pub fn detect_game_installations() -> Result<Vec<GameInstallation>, AppError> {
@@ -16,6 +18,11 @@ pub fn list_profiles(profiles_path: String) -> Result<Vec<ProfileSummary>, AppEr
 #[tauri::command]
 pub fn get_profile_detail(profile_path: String) -> Result<ProfileDetail, AppError> {
     manager::get_profile_detail(&profile_path)
+}
+
+#[tauri::command]
+pub fn scan_profile_contents(profile_path: String) -> Result<ProfileContents, AppError> {
+    manager::scan_profile_contents(&profile_path)
 }
 
 #[tauri::command]

@@ -1,13 +1,32 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    /* Typography — macOS system font */
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+    /* Text sizes — override Tailwind defaults to match macOS desktop conventions */
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: calc(1.125 / 0.8125);
+    --text-sm: 0.875rem;
+    --text-sm--line-height: calc(1.25 / 0.875);
+    --text-base: 1rem;
+    --text-base--line-height: calc(1.375 / 1);
+    --text-lg: 1.0625rem;
+    --text-lg--line-height: calc(1.375 / 1.0625);
+
+    /* Shadows — macOS uses subtler, more diffused elevation */
+    --shadow-sm: 0 0.0625rem 0.125rem oklch(0 0 0 / 6%);
+    --shadow: 0 0.0625rem 0.1875rem oklch(0 0 0 / 8%), 0 0.0625rem 0.125rem oklch(0 0 0 / 6%);
+    --shadow-md: 0 0.25rem 0.5rem oklch(0 0 0 / 8%), 0 0.125rem 0.25rem oklch(0 0 0 / 6%);
+    --shadow-lg: 0 0.625rem 1.5rem oklch(0 0 0 / 10%), 0 0.25rem 0.5rem oklch(0 0 0 / 6%);
+    --shadow-xl: 0 1.25rem 2.5rem oklch(0 0 0 / 12%), 0 0.5rem 0.625rem oklch(0 0 0 / 6%);
+
+    /* Color tokens — mapped from CSS custom properties */
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +58,9 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+
+    /* Border radius — macOS Tahoe uses larger radii (16pt window corners) */
+    --radius: 0.625rem;
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -48,83 +70,188 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ============================================================
+   Light mode — macOS Tahoe system colors
+   ============================================================ */
 :root {
     --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
+    --foreground: oklch(0 0 0);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary: oklch(0.21 0.006 285.885);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
+    --card-foreground: oklch(0 0 0);
+    --popover: oklch(1 0 0 / 80%);
+    --popover-foreground: oklch(0 0 0);
+    --primary: oklch(0.488 0.243 264.376);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.968 0 0);
+    --secondary-foreground: oklch(0.25 0.005 285.8);
+    --muted: oklch(0.968 0 0);
+    --muted-foreground: oklch(0.44 0.02 285.9);
+    --accent: oklch(0.968 0 0);
+    --accent-foreground: oklch(0.25 0.005 285.8);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
+    --border: oklch(0 0 0 / 10%);
+    --input: oklch(0 0 0 / 10%);
+    --ring: oklch(0.488 0.243 264.376);
     --chart-1: oklch(0.845 0.143 164.978);
     --chart-2: oklch(0.696 0.17 162.48);
     --chart-3: oklch(0.596 0.145 163.225);
     --chart-4: oklch(0.508 0.118 165.612);
     --chart-5: oklch(0.432 0.095 166.913);
-    --radius: 0.45rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.21 0.006 285.885);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --sidebar: oklch(0.978 0 0 / 85%);
+    --sidebar-foreground: oklch(0 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(0 0 0 / 8%);
+    --sidebar-accent-foreground: oklch(0 0 0);
+    --sidebar-border: oklch(0 0 0 / 12%);
+    --sidebar-ring: oklch(0.488 0.243 264.376);
 }
 
+/* ============================================================
+   Dark mode — macOS Tahoe dark appearance
+   ============================================================ */
 .dark {
-    --background: oklch(0.141 0.005 285.823);
+    --background: oklch(0.16 0.004 285.8);
     --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
+    --card: oklch(0.20 0.005 285.8);
     --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
+    --popover: oklch(0.20 0.005 285.8 / 80%);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.92 0.004 286.32);
-    --primary-foreground: oklch(0.21 0.006 285.885);
-    --secondary: oklch(0.274 0.006 286.033);
+    --primary: oklch(0.61 0.215 264);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.24 0.005 285.8);
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
+    --muted: oklch(0.24 0.005 285.8);
+    --muted-foreground: oklch(0.65 0.01 286);
+    --accent: oklch(0.24 0.005 285.8);
     --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
+    --destructive: oklch(0.65 0.22 25);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
+    --ring: oklch(0.61 0.215 264);
     --chart-1: oklch(0.845 0.143 164.978);
     --chart-2: oklch(0.696 0.17 162.48);
     --chart-3: oklch(0.596 0.145 163.225);
     --chart-4: oklch(0.508 0.118 165.612);
     --chart-5: oklch(0.432 0.095 166.913);
-    --sidebar: oklch(0.21 0.006 285.885);
+    --sidebar: oklch(0.17 0.004 285.8 / 85%);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
+    --sidebar-primary: oklch(0.61 0.215 264);
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(1 0 0 / 10%);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --sidebar-ring: oklch(0.61 0.215 264);
 }
 
+/* ============================================================
+   Base layer — macOS desktop app defaults
+   ============================================================ */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+    * {
+        @apply border-border outline-ring/50;
     }
-  body {
-    @apply bg-background text-foreground;
+
+    html {
+        @apply font-sans;
+        color-scheme: light dark;
+        -webkit-font-smoothing: antialiased;
     }
-  html {
-    @apply font-sans;
+
+    body {
+        @apply bg-background text-foreground;
+        cursor: default;
+        user-select: none;
+        overflow: hidden;
+    }
+
+    /* Re-enable text selection on content areas */
+    textarea,
+    input,
+    pre,
+    code,
+    [contenteditable],
+    [data-slot="content"],
+    [data-slot="scroll-area-viewport"] {
+        user-select: text;
+        cursor: text;
+    }
+
+    /* macOS: controls use default cursor, never pointer */
+    button,
+    [role="button"],
+    a,
+    select,
+    label {
+        cursor: default;
+    }
+
+    /* Drag region for overlay title bar */
+    [data-tauri-drag-region] {
+        -webkit-app-region: drag;
+    }
+
+    [data-tauri-drag-region] button,
+    [data-tauri-drag-region] a,
+    [data-tauri-drag-region] input,
+    [data-tauri-drag-region] [role="button"] {
+        -webkit-app-region: no-drag;
+    }
+
+    /* ---- Data-attribute overrides for shadcn components ---- */
+
+    /* Switch: macOS uses green for ON state, not primary blue */
+    [data-slot="switch"][data-checked] {
+        background-color: oklch(0.65 0.19 145) !important;
+    }
+
+    .dark [data-slot="switch"][data-checked] {
+        background-color: oklch(0.55 0.17 145) !important;
+    }
+
+    /* ---- CSS vibrancy simulation (default mode) ---- */
+    /* Dark: lighter sidebar to match native macOS sidebar contrast */
+    .dark [data-sidebar="sidebar"] {
+        background: oklch(0.24 0.005 285.8) !important;
+    }
+
+    /* Light: slightly tinted sidebar like native macOS */
+    :root:not(.dark) [data-sidebar="sidebar"] {
+        background: oklch(0.96 0.002 285.8) !important;
+    }
+
+    /* Popover/menu glass effect */
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="context-menu-content"],
+    [data-slot="combobox-content"] {
+        -webkit-backdrop-filter: blur(1.5rem) saturate(180%);
+        backdrop-filter: blur(1.5rem) saturate(180%);
+    }
+
+    /* ---- Native vibrancy mode ---- */
+    .native-vibrancy,
+    .native-vibrancy body {
+        background: transparent;
+    }
+
+    /* Dark + native: fully transparent sidebar so OS vibrancy shows */
+    .native-vibrancy.dark [data-sidebar="sidebar"] {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: transparent !important;
+    }
+    .native-vibrancy.dark [data-slot="sidebar-container"] {
+        border-color: oklch(1 0 0 / 8%) !important;
+    }
+
+    /* Light + native: semi-transparent white so sidebar stays light */
+    .native-vibrancy:not(.dark) [data-sidebar="sidebar"] {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: oklch(1 0 0 / 60%) !important;
+    }
+    .native-vibrancy:not(.dark) [data-slot="sidebar-container"] {
+        border-color: oklch(0 0 0 / 5%) !important;
     }
 }

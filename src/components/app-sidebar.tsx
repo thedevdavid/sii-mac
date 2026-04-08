@@ -24,15 +24,15 @@ import { useProfiles } from "@/hooks/use-profiles";
 import { gameShortName, gameDisplayName } from "@/lib/types";
 import type { GameInstallation, ProfileSummary } from "@/lib/types";
 import {
-  Truck,
-  LayoutDashboard,
-  Save,
-  Archive,
-  Settings,
-  ChevronsUpDown,
-  Check,
-  Copy,
-} from "lucide-react";
+  IconTruck,
+  IconLayoutDashboard,
+  IconDeviceFloppy,
+  IconArchive,
+  IconSettings,
+  IconSelector,
+  IconCheck,
+  IconCopy,
+} from "@tabler/icons-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export type View = "overview" | "saves" | "clone" | "backups" | "settings";
@@ -64,19 +64,19 @@ export function AppSidebar({
 
   return (
     <Sidebar>
-      <SidebarHeader>
+      <SidebarHeader className="pt-[2.375rem]">
         <SidebarMenu>
           <SidebarMenuItem>
             {detectingGames ? (
               <Skeleton className="h-10 w-full rounded-md" />
             ) : (
               <DropdownMenu>
-                <DropdownMenuTrigger render={() => (<SidebarMenuButton
+                <DropdownMenuTrigger render={<SidebarMenuButton
                     size="lg"
-                    className="data-[state=open]:bg-sidebar-accent"
-                  >
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                      <Truck className="size-4" />
+                    className="data-[popup-open]:bg-sidebar-accent"
+                  />}>
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <IconTruck className="size-4" />
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">
@@ -88,10 +88,10 @@ export function AppSidebar({
                           : "No game detected"}
                       </span>
                     </div>
-                    <ChevronsUpDown className="ml-auto size-4" />
-                  </SidebarMenuButton>)} />
+                    <IconSelector className="ml-auto size-4" />
+                  </DropdownMenuTrigger>
                 <DropdownMenuContent
-                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56"
+                  className="w-[--anchor-width] min-w-56"
                   align="start"
                   sideOffset={4}
                 >
@@ -106,7 +106,7 @@ export function AppSidebar({
                           ? profiles.map((profile) => (
                               <DropdownMenuItem
                                 key={profile.path}
-                                onSelect={() => {
+                                onClick={() => {
                                   onSelectInstallation(inst);
                                   onSelectProfile(profile);
                                   onViewChange("overview");
@@ -121,13 +121,13 @@ export function AppSidebar({
                                   </span>
                                 )}
                                 {selectedProfile?.path === profile.path && (
-                                  <Check className="ml-auto size-4" />
+                                  <IconCheck className="ml-auto size-4" />
                                 )}
                               </DropdownMenuItem>
                             ))
                           : (
                               <DropdownMenuItem
-                                onSelect={() => {
+                                onClick={() => {
                                   onSelectInstallation(inst);
                                   onSelectProfile(null);
                                 }}
@@ -165,7 +165,7 @@ export function AppSidebar({
                   onClick={() => onViewChange("overview")}
                   disabled={!hasProfile}
                 >
-                  <LayoutDashboard className="size-4" />
+                  <IconLayoutDashboard className="size-4" />
                   <span>Overview</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -175,7 +175,7 @@ export function AppSidebar({
                   onClick={() => onViewChange("saves")}
                   disabled={!hasProfile}
                 >
-                  <Save className="size-4" />
+                  <IconDeviceFloppy className="size-4" />
                   <span>Saves</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -185,7 +185,7 @@ export function AppSidebar({
                   onClick={() => onViewChange("clone")}
                   disabled={!hasProfile}
                 >
-                  <Copy className="size-4" />
+                  <IconCopy className="size-4" />
                   <span>Clone Profile</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -195,7 +195,7 @@ export function AppSidebar({
                   onClick={() => onViewChange("backups")}
                   disabled={!hasProfile}
                 >
-                  <Archive className="size-4" />
+                  <IconArchive className="size-4" />
                   <span>Backups</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -212,7 +212,7 @@ export function AppSidebar({
                   isActive={activeView === "settings"}
                   onClick={() => onViewChange("settings")}
                 >
-                  <Settings className="size-4" />
+                  <IconSettings className="size-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
