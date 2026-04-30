@@ -149,11 +149,17 @@ fn sync_profile_sii(save_path: &str, changes: &PlayerChanges) -> Result<(), AppE
     };
 
     if let Some(xp) = changes.experience {
-        obj.set("experience_points", SiiValue::Integer(xp));
-        obj.set("cached_experience", SiiValue::Integer(xp));
+        if obj.get("cached_experience").is_some() {
+            obj.set("cached_experience", SiiValue::Integer(xp));
+        }
+        if obj.get("experience_points").is_some() {
+            obj.set("experience_points", SiiValue::Integer(xp));
+        }
     }
     if let Some(money) = changes.money {
-        obj.set("money_account", SiiValue::Integer(money));
+        if obj.get("money_account").is_some() {
+            obj.set("money_account", SiiValue::Integer(money));
+        }
     }
 
     let new_text = serialize_siin(&doc);
