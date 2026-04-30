@@ -11,30 +11,35 @@ import {
 } from "@/components/ui/item";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useUpdatePlayerData } from "@/hooks/use-mutations";
-import type { BankData, PlayerData } from "@/features/editor/types";
+import type { BankData, EconomyData, PlayerData } from "@/features/editor/types";
+import { calculateLevel } from "@/lib/level-calc";
 
 const PlayerFormSchema = z.object({
   money: z.number().int().min(0),
+  experience: z.number().int().min(0),
 });
 
 interface PlayerEditorProps {
   savePath: string;
   bank: BankData;
   player: PlayerData;
+  economy: EconomyData;
+  game: "ats" | "ets2";
 }
 
-export function PlayerEditor({ savePath, bank, player }: PlayerEditorProps) {
+export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEditorProps) {
   const mutation = useUpdatePlayerData(savePath);
 
   const form = useForm({
     defaultValues: {
       money: bank.money_account,
+      experience: economy.experience_points ?? 0,
     },
     validators: {
       onChange: PlayerFormSchema,
     },
     onSubmit: ({ value }) => {
-      mutation.mutate({ money: value.money });
+      mutation.mutate({ money: value.money, experience: value.experience });
     },
   });
 
@@ -72,6 +77,36 @@ export function PlayerEditor({ savePath, bank, player }: PlayerEditorProps) {
                 </ItemActions>
               </Item>
             )}
+          />
+
+          <form.Field
+            name="experience"
+            children={(field) => {
+              const levelInfo = calculateLevel(field.state.value, game);
+              return (
+                <Item variant="outline">
+                  <ItemContent>
+                    <ItemTitle>Experience</ItemTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Level {levelInfo.level} &middot;{" "}
+                      {Math.round(levelInfo.progress * 100)}% to next
+                    </p>
+                  </ItemContent>
+                  <ItemActions>
+                    <Input
+                      type="number"
+                      value={field.state.value}
+                      onChange={(e) =>
+                        field.handleChange(Number(e.target.value))
+                      }
+                      onBlur={field.handleBlur}
+                      className="w-36 text-right"
+                      min={0}
+                    />
+                  </ItemActions>
+                </Item>
+              );
+            }}
           />
 
           <Item variant="outline">

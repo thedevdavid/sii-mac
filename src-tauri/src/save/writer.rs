@@ -111,6 +111,12 @@ pub fn update_player(save_path: &str, changes: &PlayerChanges) -> Result<(), App
             }
         }
 
+        if let Some(xp) = changes.experience {
+            if let Some(economy) = doc.find_by_class_mut("economy") {
+                economy.set("experience_points", SiiValue::Integer(xp));
+            }
+        }
+
         Ok(())
     })
 }
@@ -339,6 +345,7 @@ economy : .economy {
  player: player.1
  bank: bank.1
  companies: 5
+ experience_points: 12345
 }
 player : player.1 {
  assigned_truck: null
@@ -390,6 +397,7 @@ garage : garage.reno {
             &save_path,
             &PlayerChanges {
                 money: Some(9_000_000),
+                experience: None,
             },
         )
         .unwrap();
@@ -397,6 +405,27 @@ garage : garage.reno {
         let saved = crate::save::reader::read_save(&save_path).unwrap();
         assert_eq!(saved.bank.money_account, 9_000_000);
         assert!(dir.join("game.sii.bak").exists(), ".bak must be created");
+    }
+
+    #[test]
+    fn test_write_save_round_trip_preserves_experience() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_sample_game_sii(dir, SAMPLE_GAME_SII);
+
+        let save_path = dir.to_string_lossy().to_string();
+        update_player(
+            &save_path,
+            &PlayerChanges {
+                money: None,
+                experience: Some(999_999),
+            },
+        )
+        .unwrap();
+
+        let saved = crate::save::reader::read_save(&save_path).unwrap();
+        assert_eq!(saved.economy.experience_points, Some(999_999));
+        assert_eq!(saved.bank.money_account, 500000, "money unchanged");
     }
 
     #[test]

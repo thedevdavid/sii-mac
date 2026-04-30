@@ -18,9 +18,10 @@ import { WorldEditor } from "./world-editor";
 interface SaveEditorProps {
   savePath: string;
   saveName: string;
+  game: "ats" | "ets2";
 }
 
-export function SaveEditor({ savePath, saveName }: SaveEditorProps) {
+export function SaveEditor({ savePath, saveName, game }: SaveEditorProps) {
   const { data, isLoading, error } = useSaveData(savePath);
 
   if (isLoading) {
@@ -86,6 +87,8 @@ export function SaveEditor({ savePath, saveName }: SaveEditorProps) {
               savePath={savePath}
               bank={data.bank}
               player={data.player}
+              economy={data.economy}
+              game={game}
             />
           </TabsContent>
 

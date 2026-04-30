@@ -23,6 +23,8 @@ pub struct EconomyData {
     pub game_time: Option<i64>,
     /// Number of companies in the world
     pub company_count: usize,
+    /// Total experience points
+    pub experience_points: Option<i64>,
 }
 
 /// Player data from the `player` object.
@@ -209,6 +211,7 @@ pub struct DriverData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerChanges {
     pub money: Option<i64>,
+    pub experience: Option<i64>,
 }
 
 /// Changes to apply to a truck.

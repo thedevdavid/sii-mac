@@ -11,7 +11,7 @@ export const Route = createFileRoute("/editor/$saveId")({
 
 function EditorPage() {
   const { saveId } = Route.useParams();
-  const { selectedProfile } = useProfileState();
+  const { selectedProfile, selectedInstallation } = useProfileState();
 
   if (!selectedProfile) {
     return <NoProfileSelected />;
@@ -19,6 +19,7 @@ function EditorPage() {
 
   const savePath = SavePathSchema.parse(`${selectedProfile.path}/save/${saveId}`);
   const saveName = prettifySaveDir(saveId);
+  const game = selectedInstallation?.game ?? "ats";
 
-  return <SaveEditor savePath={savePath} saveName={saveName} />;
+  return <SaveEditor savePath={savePath} saveName={saveName} game={game} />;
 }

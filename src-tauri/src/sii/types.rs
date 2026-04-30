@@ -64,6 +64,11 @@ impl SiiDocument {
         self.objects.iter().find(|o| o.id == id)
     }
 
+    /// Find the first object with the given class name (mutable).
+    pub fn find_by_class_mut(&mut self, class: &str) -> Option<&mut SiiObject> {
+        self.objects.iter_mut().find(|o| o.class == class)
+    }
+
     /// Find an object by its ID (mutable).
     pub fn find_by_id_mut(&mut self, id: &str) -> Option<&mut SiiObject> {
         self.objects.iter_mut().find(|o| o.id == id)

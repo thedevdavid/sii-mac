@@ -66,12 +66,14 @@ fn extract_economy(doc: &SiiDocument) -> Result<EconomyData, AppError> {
         .ok_or_else(|| AppError::SiiDecode("Missing 'bank' field in economy object".into()))?;
     let game_time = obj.get_int("game_time");
     let company_count = obj.get_int("companies").unwrap_or(0) as usize;
+    let experience_points = obj.get_int("experience_points");
 
     Ok(EconomyData {
         player_id,
         bank_id,
         game_time,
         company_count,
+        experience_points,
     })
 }
 
