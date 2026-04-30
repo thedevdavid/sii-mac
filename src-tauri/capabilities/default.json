@@ -1,15 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Capability for the main window. All filesystem IO goes through Rust commands (which aren't scope-bound), so the frontend needs no fs: permissions at all.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default",
-    "dialog:default",
-    "os:default",
-    "process:default",
+    "opener:allow-reveal-item-in-dir",
+    "opener:allow-open-url",
+    "dialog:allow-open",
+    "os:allow-platform",
+    "process:allow-restart",
     "store:default",
-    "fs:default"
+    "updater:default"
   ]
 }

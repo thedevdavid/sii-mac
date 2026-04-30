@@ -7,9 +7,24 @@ import path from "path";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// React Compiler handles memoization automatically, so manual useMemo /
+// useCallback / React.memo should only appear where the compiler can't infer
+// reference stability (external store subscriptions, interop boundaries).
+const reactCompilerConfig = {
+  target: "19" as const,
+};
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [TanStackRouterVite(), react(), tailwindcss()],
+  plugins: [
+    TanStackRouterVite(),
+    react({
+      babel: {
+        plugins: [["babel-plugin-react-compiler", reactCompilerConfig]],
+      },
+    }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

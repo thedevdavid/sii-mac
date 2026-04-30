@@ -12,9 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SavesRouteImport } from './routes/saves'
 import { Route as OverviewRouteImport } from './routes/overview'
+import { Route as ModsRouteImport } from './routes/mods'
+import { Route as CompareRouteImport } from './routes/compare'
 import { Route as CloneRouteImport } from './routes/clone'
 import { Route as BackupsRouteImport } from './routes/backups'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EditorSaveIdRouteImport } from './routes/editor.$saveId'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -29,6 +32,16 @@ const SavesRoute = SavesRouteImport.update({
 const OverviewRoute = OverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModsRoute = ModsRouteImport.update({
+  id: '/mods',
+  path: '/mods',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CloneRoute = CloneRouteImport.update({
@@ -46,54 +59,92 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditorSaveIdRoute = EditorSaveIdRouteImport.update({
+  id: '/editor/$saveId',
+  path: '/editor/$saveId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backups': typeof BackupsRoute
   '/clone': typeof CloneRoute
+  '/compare': typeof CompareRoute
+  '/mods': typeof ModsRoute
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
+  '/editor/$saveId': typeof EditorSaveIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/backups': typeof BackupsRoute
   '/clone': typeof CloneRoute
+  '/compare': typeof CompareRoute
+  '/mods': typeof ModsRoute
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
+  '/editor/$saveId': typeof EditorSaveIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/backups': typeof BackupsRoute
   '/clone': typeof CloneRoute
+  '/compare': typeof CompareRoute
+  '/mods': typeof ModsRoute
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
+  '/editor/$saveId': typeof EditorSaveIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/backups' | '/clone' | '/overview' | '/saves' | '/settings'
+  fullPaths:
+    | '/'
+    | '/backups'
+    | '/clone'
+    | '/compare'
+    | '/mods'
+    | '/overview'
+    | '/saves'
+    | '/settings'
+    | '/editor/$saveId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/backups' | '/clone' | '/overview' | '/saves' | '/settings'
+  to:
+    | '/'
+    | '/backups'
+    | '/clone'
+    | '/compare'
+    | '/mods'
+    | '/overview'
+    | '/saves'
+    | '/settings'
+    | '/editor/$saveId'
   id:
     | '__root__'
     | '/'
     | '/backups'
     | '/clone'
+    | '/compare'
+    | '/mods'
     | '/overview'
     | '/saves'
     | '/settings'
+    | '/editor/$saveId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BackupsRoute: typeof BackupsRoute
   CloneRoute: typeof CloneRoute
+  CompareRoute: typeof CompareRoute
+  ModsRoute: typeof ModsRoute
   OverviewRoute: typeof OverviewRoute
   SavesRoute: typeof SavesRoute
   SettingsRoute: typeof SettingsRoute
+  EditorSaveIdRoute: typeof EditorSaveIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -119,6 +170,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OverviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mods': {
+      id: '/mods'
+      path: '/mods'
+      fullPath: '/mods'
+      preLoaderRoute: typeof ModsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/clone': {
       id: '/clone'
       path: '/clone'
@@ -140,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/editor/$saveId': {
+      id: '/editor/$saveId'
+      path: '/editor/$saveId'
+      fullPath: '/editor/$saveId'
+      preLoaderRoute: typeof EditorSaveIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -147,9 +219,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BackupsRoute: BackupsRoute,
   CloneRoute: CloneRoute,
+  CompareRoute: CompareRoute,
+  ModsRoute: ModsRoute,
   OverviewRoute: OverviewRoute,
   SavesRoute: SavesRoute,
   SettingsRoute: SettingsRoute,
+  EditorSaveIdRoute: EditorSaveIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -17,6 +17,8 @@ const ROUTE_LABELS: Record<string, string> = {
   "/": "Overview",
   "/overview": "Overview",
   "/saves": "Saves",
+  "/mods": "Mods",
+  "/compare": "Compare",
   "/clone": "Clone Profile",
   "/backups": "Backups",
   "/settings": "Settings",
@@ -29,7 +31,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 function RootLayout() {
   const matches = useMatches();
   const currentPath = matches[matches.length - 1]?.pathname ?? "/";
-  const pageTitle = ROUTE_LABELS[currentPath] ?? "Overview";
+  const pageTitle = ROUTE_LABELS[currentPath]
+    ?? (currentPath.startsWith("/editor/") ? "Save Editor" : "Overview");
 
   return (
     <ProfileProvider>

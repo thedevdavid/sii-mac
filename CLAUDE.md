@@ -1,47 +1,46 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-SII Mac is a macOS desktop app for managing American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS2) profiles. Built with Tauri 2 (Rust backend) + React 19 + Vite + TypeScript frontend.
+SII Mac is a cross-platform desktop app for managing American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS2) profiles and save files. Built with Tauri 2 (Rust backend) + React 19 + Vite + TypeScript frontend.
 
-The app detects game installations on macOS, reads/decodes SII save files (binary/encrypted format used by SCS games), and provides profile management: viewing, cloning, renaming, deleting, backup/restore.
+Features: game detection (macOS/Windows/Linux/CrossOver/Steam Cloud), profile viewing/cloning/renaming/deleting, save editing (money, trucks, trailers, garages), mod management, backup/restore, game config editing, profile comparison, auto-updater.
 
 ## Commands
 
-- `npm run tauri dev` — Run the full app in development (starts Vite dev server + Rust backend)
-- `npm run tauri build` — Production build (creates macOS .app bundle)
-- `npm run dev` — Vite dev server only (frontend, no Tauri backend)
-- `npm run build` — TypeScript check + Vite build (frontend only)
-- `cd src-tauri && cargo check` — Check Rust code without building
-- `cd src-tauri && cargo build` — Build Rust backend only
-
-No test runner or linter is currently configured.
+- `npm run tauri dev` — Full app (Vite + Rust)
+- `npm run tauri build` — Production build
+- `npm run dev` — Vite dev server only
+- `npm run build` — TypeScript check + Vite build
+- `cd src-tauri && cargo check` — Check Rust
+- `cd src-tauri && cargo test --lib` — Run Rust tests (72 pass, 3 ignored)
 
 ## Architecture
 
-### Backend (Rust — `src-tauri/`)
+### Backend (Rust — `src-tauri/src/`)
 
-- **`src/lib.rs`** — Tauri app entry point, registers all plugins and Tauri commands
-- **`src/commands/`** — Tauri command handlers exposed to frontend via `invoke()`. Three modules: `profiles`, `saves`, `backup`
-- **`src/profile/`** — Core profile logic: `detection` (finds game install paths on macOS), `models` (data structures), `manager` (CRUD operations on profiles)
-- **`src/sii/`** — SII file decoder using `sii-decode-rs` crate. Parses the binary/encrypted save format into plaintext, with field extraction utilities
-- **`src/error.rs`** — `AppError` enum with `thiserror` + custom `Serialize` impl (serializes as `{kind, message}` for frontend consumption)
+- **`lib.rs`** — Tauri entry, registers plugins (fs, dialog, os, process, store, updater) and ~20 commands
+- **`commands/`** — 5 modules: `profiles` (detect, list, clone, rename, delete, scan mods), `saves` (list), `editor` (get/update trucks/trailers/garages/player), `backup` (create/list/restore), `config` (game settings)
+- **`sii/`** — SII file processing: `extract.rs` (legacy field extraction), `parser.rs` (SIIN → SiiDocument tree), `writer.rs` (SiiDocument → SIIN text), `types.rs` (SiiDocument, SiiObject, SiiValue)
+- **`save/`** — Save editing: `models.rs` (SaveData, TruckData, etc.), `reader.rs` (game.sii → SaveData), `writer.rs` (apply edits + write back)
+- **`profile/`** — Profile management: `detection.rs` (cross-platform game paths), `manager.rs` (CRUD + Steam Cloud), `cloner.rs` (parser-based patching), `scanner.rs` (content tree), `metadata.rs` (profile.sii fields), `mod_scanner.rs` (filesystem mod scan + manifest parsing), `models.rs`
+- **`utils.rs`** — Shared: format_modified_time, dir_size, copy_dir, prettify_save_dir
+- **`error.rs`** — AppError enum serialized as `{kind, message}` for frontend
 
-### Frontend (React — `src/`)
+### Frontend (React 19 — `src/`)
 
-- **`src/App.tsx`** — Root component. Manual view routing via `activeView` state (no router). Wraps app in `QueryClientProvider`, `SidebarProvider`, `TooltipProvider`
-- **`src/lib/tauri-commands.ts`** — Typed wrappers around `invoke()` calls to Rust commands. This is the sole bridge between frontend and backend
-- **`src/lib/types.ts`** — TypeScript types mirroring Rust structs (`GameInstallation`, `ProfileSummary`, `ProfileDetail`, etc.)
-- **`src/features/profiles/`** — Feature components: `profile-overview`, `profile-saves`, `profile-clone`, `profile-backups`
-- **`src/hooks/`** — TanStack Query hooks (`use-game-detection`, `use-profiles`)
-- **`src/components/ui/`** — shadcn/ui components (Tailwind CSS v4)
+- **Routing**: TanStack Router v1, file-based routes in `src/routes/` (overview, saves, mods, clone, compare, backups, settings, editor.$saveId)
+- **State**: `ProfileContext` (`src/lib/profile-context.tsx`) for selected profile/installation. TanStack Query for server state. No global store.
+- **Query**: Centralized key factory (`src/lib/query-keys.ts`). Mutation hooks (`src/hooks/use-mutations.ts`) with automatic invalidation.
+- **Components**: `cupertino/` (macOS-styled wrappers) + `ui/` (shadcn/Base UI components). DataTable + DataTableToolbar + DataTableFacetedFilter for data grids.
+- **Features**: `src/features/editor/` (save editor tabs), `src/features/profiles/` (overview, saves, mods, clone, compare, backups)
 
 ### Key Patterns
 
-- Frontend-backend communication: all calls go through `src/lib/tauri-commands.ts` → Tauri `invoke()` → Rust command handlers in `src-tauri/src/commands/`
-- Rust errors serialize to `{kind: string, message: string}` — frontend can pattern-match on `kind`
-- Path alias `@/` maps to `./src/` (configured in both vite.config.ts and tsconfig.json)
-- State management: TanStack React Query for server state, React state for UI state
-- UI: shadcn/ui components with Radix primitives, Tailwind CSS v4, Geist font
+- Frontend ↔ backend: `src/lib/tauri-commands.ts` → Tauri `invoke()` → Rust commands. All responses validated with Zod.
+- Mutations: `useMutation` hooks in `use-mutations.ts` with automatic `queryKeys` invalidation and toast notifications.
+- Data tables: `DataTable` component with pagination, column visibility, global filter, faceted filters. All tables use `DataTableToolbar`.
+- Forms: TanStack Form + Zod schemas.
+- Path alias: `@/` → `./src/`
+- UI: shadcn/ui with Base UI primitives (`@base-ui/react`), Tailwind CSS v4, @tabler/icons-react
+- Platform config: `tauri.macos.conf.json` / `tauri.windows.conf.json` for OS-specific settings

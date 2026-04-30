@@ -1,3 +1,5 @@
+import { queryKeys } from "@/lib/query-keys";
+import { formatError } from "@/lib/format-error";
 import { useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -43,7 +45,10 @@ import {
   restoreBackup,
 } from "@/lib/tauri-commands";
 import { revealInFinder } from "@/lib/opener";
-import type { ProfileSummary, GameInstallation } from "@/lib/types";
+import { useProgressStream } from "@/hooks/use-progress-stream";
+import { ProgressOverlay } from "@/components/progress-overlay";
+import type { BackupPath, GameInstallation } from "@/lib/core-types";
+import type { ProfileSummary } from "@/features/profiles/types";
 
 interface ProfileBackupsProps {
   profile: ProfileSummary;
@@ -56,9 +61,10 @@ export function ProfileBackups({
 }: ProfileBackupsProps) {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
+  const progressStream = useProgressStream();
 
   const { data: backups, isLoading } = useQuery({
-    queryKey: ["backups"],
+    queryKey: queryKeys.backups.all(),
     queryFn: () => listBackups(),
   });
 
@@ -70,33 +76,36 @@ export function ProfileBackups({
   );
 
   function handleCreateBackup() {
+    const { jobId, channel } = progressStream.begin();
     startTransition(async () => {
       try {
-        const path = await backupProfile(profile.path);
-        toast.success(`Backup created for "${profile.name}"`, {
-          description: path,
-        });
-        await queryClient.invalidateQueries({ queryKey: ["backups"] });
+        await backupProfile(profile.path, undefined, jobId, channel);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.backups.all() });
       } catch (err) {
-        toast.error(`Backup failed: ${(err as Error).message ?? err}`);
+        if (progressStream.getStatus() === "idle") {
+          toast.error(`Backup failed: ${formatError(err)}`);
+        }
       }
     });
   }
 
-  function handleRestore(backupPath: string, backupName: string) {
+  function handleRestore(backupPath: BackupPath, backupName: string) {
+    const { jobId, channel } = progressStream.begin();
     startTransition(async () => {
       try {
-        await restoreBackup(backupPath, installation.profiles_path);
+        await restoreBackup(backupPath, installation.profiles_path, jobId, channel);
         toast.success(`Backup "${backupName}" restored`, {
           description:
             "The profile has been restored. Switch to it using the profile selector.",
         });
         await queryClient.invalidateQueries({
-          queryKey: ["profiles", installation.profiles_path],
+          queryKey: queryKeys.profiles.list(installation.profiles_path),
         });
-        await queryClient.invalidateQueries({ queryKey: ["backups"] });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.backups.all() });
       } catch (err) {
-        toast.error(`Restore failed: ${(err as Error).message ?? err}`);
+        if (progressStream.getStatus() === "idle") {
+          toast.error(`Restore failed: ${formatError(err)}`);
+        }
       }
     });
   }
@@ -110,46 +119,13 @@ export function ProfileBackups({
     );
   }
 
-  function RestoreDialog({
-    backupPath,
-    backupName,
-  }: {
-    backupPath: string;
-    backupName: string;
-  }) {
-    return (
-      <AlertDialog>
-        <AlertDialogTrigger
-          render={
-            <Button variant="ghost" size="sm" disabled={isPending} />
-          }
-        >
-          <IconRotate className="size-3.5" />
-          Restore
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Restore Backup</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will create a new profile from this backup. If a profile with
-              the same name already exists, the restore will fail.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => handleRestore(backupPath, backupName)}
-            >
-              Restore
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    );
-  }
-
   return (
     <ScrollArea className="h-full">
+      <ProgressOverlay
+        progress={progressStream.progress}
+        onCancel={() => progressStream.cancel()}
+        onDismiss={() => progressStream.reset()}
+      />
       <div className="space-y-5 p-5">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -191,6 +167,8 @@ export function ProfileBackups({
                     <RestoreDialog
                       backupPath={backup.path}
                       backupName={backup.profile_name}
+                      isPending={isPending}
+                      onRestore={handleRestore}
                     />
                   </ItemActions>
                 </Item>
@@ -241,6 +219,8 @@ export function ProfileBackups({
                     <RestoreDialog
                       backupPath={backup.path}
                       backupName={backup.profile_name}
+                      isPending={isPending}
+                      onRestore={handleRestore}
                     />
                   </ItemActions>
                 </Item>
@@ -250,6 +230,44 @@ export function ProfileBackups({
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+function RestoreDialog({
+  backupPath,
+  backupName,
+  isPending,
+  onRestore,
+}: {
+  backupPath: BackupPath;
+  backupName: string;
+  isPending: boolean;
+  onRestore: (path: BackupPath, name: string) => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={<Button variant="ghost" size="sm" disabled={isPending} />}
+      >
+        <IconRotate className="size-3.5" />
+        Restore
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Restore Backup</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will create a new profile from this backup. If a profile with
+            the same name already exists, the restore will fail.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => onRestore(backupPath, backupName)}>
+            Restore
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

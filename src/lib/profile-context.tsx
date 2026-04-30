@@ -1,6 +1,7 @@
 import { createContext, use, useState } from "react";
 import { useGameDetection } from "@/hooks/use-game-detection";
-import type { GameInstallation, ProfileSummary } from "@/lib/types";
+import type { GameInstallation } from "@/lib/core-types";
+import type { ProfileSummary } from "@/features/profiles/types";
 
 interface ProfileState {
   selectedProfile: ProfileSummary | null;
@@ -13,15 +14,14 @@ const ProfileContext = createContext<ProfileState | null>(null);
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const { data: installations } = useGameDetection();
-  const [selectedInstallation, setSelectedInstallation] =
+  const [explicitInstallation, setExplicitInstallation] =
     useState<GameInstallation | null>(null);
   const [selectedProfile, setSelectedProfile] =
     useState<ProfileSummary | null>(null);
 
-  const firstInstallation = installations?.[0];
-  if (firstInstallation && !selectedInstallation) {
-    setSelectedInstallation(firstInstallation);
-  }
+  // Derive effective installation: explicit user selection → first auto-detected → null
+  const selectedInstallation =
+    explicitInstallation ?? installations?.[0] ?? null;
 
   return (
     <ProfileContext
@@ -29,7 +29,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         selectedProfile,
         setSelectedProfile,
         selectedInstallation,
-        setSelectedInstallation,
+        setSelectedInstallation: setExplicitInstallation,
       }}
     >
       {children}

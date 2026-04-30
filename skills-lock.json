@@ -1,10 +1,34 @@
 {
   "version": 1,
   "skills": {
+    "cross-platform-compatibility": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "skillPath": "skills/cross-platform-compatibility/SKILL.md",
+      "computedHash": "a4cce642d2919910b5b6aa0eaab5798d64dafc1ad8923d87b2ec689efc8d4ace"
+    },
+    "desktop-app": {
+      "source": "popup-studio-ai/bkit-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/desktop-app/SKILL.md",
+      "computedHash": "a312eddbcbb98ac074cdbe8ed86912cd9d06aa0720a7daf6dcfa60e802309364"
+    },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "sourceType": "github",
+      "skillPath": "skills/rust-best-practices/SKILL.md",
+      "computedHash": "fd336f2f772eb46ddf8658de5f9dd8faa1f35615b316665307fc82eeb4b2e658"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
       "computedHash": "873c67922d80775a9fdf596db7964b579f0408c30ec6e3d11989f6055bbec89f"
+    },
+    "tauri-v2": {
+      "source": "nodnarbnitram/claude-code-extensions",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/tauri-v2/SKILL.md",
+      "computedHash": "377c61c46cf48c35b942042bc8abb9a039049a47f37d7f12b4f491d012777490"
     }
   }
 }

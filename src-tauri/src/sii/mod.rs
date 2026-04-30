@@ -1,105 +1,83 @@
+pub mod parser;
+pub mod types;
+pub mod writer;
+
 use crate::error::AppError;
+use crate::profile::models::ModEntry;
+use crate::sii::parser::parse_siin;
+use crate::sii::types::SiiValue;
 
 /// Decode an SII file (encrypted, binary, or text) into its plaintext SIIN representation.
-/// Uses sii_decode crate for format detection and decoding.
 pub fn decode_sii_file(data: &[u8]) -> Result<String, AppError> {
     let decoded = sii_decode::file_type::decode_until_siin(data)
-        .map_err(|e| AppError::SiiDecode(format!("{:?}", e)))?;
+        .map_err(|e| AppError::SiiDecode(format!("{e:?}")))?;
     String::from_utf8(decoded).map_err(|e| AppError::SiiDecode(e.to_string()))
 }
 
-/// Extract a specific field value from decoded SII plaintext.
-pub fn extract_field(sii_text: &str, field_name: &str) -> Option<String> {
-    for line in sii_text.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix(&format!("{}:", field_name)) {
-            return Some(rest.trim().to_string());
-        }
-        // Also try with leading space (nested fields)
-        if let Some(rest) = trimmed.strip_prefix(&format!(" {}:", field_name)) {
-            return Some(rest.trim().to_string());
-        }
-    }
-    None
+/// Parse a single-object SIIN document and return the first object's string
+/// field value. Returns `None` if the parse fails, the document is empty, or
+/// the field is missing.
+///
+/// Lightweight convenience for "metadata-style" .sii files (`profile.sii`,
+/// `manifest.sii`, `info.sii`) where the caller wants one field out of a
+/// single known object.
+pub fn first_object_string(text: &str, field: &str) -> Option<String> {
+    let doc = parse_siin(text).ok()?;
+    let obj = doc.objects.first()?;
+    obj.get_string(field).map(str::to_string)
 }
 
-/// Extract a quoted string field value (removes surrounding quotes).
-pub fn extract_string_field(sii_text: &str, field_name: &str) -> Option<String> {
-    extract_field(sii_text, field_name).map(|v| v.trim_matches('"').to_string())
+/// Parse a single-object SIIN document and collect every string field whose
+/// name matches `field_name` (including repeated `foo[]:` entries). Useful
+/// for mod manifests which declare `category[]:` and `compatible_versions[]:`
+/// as repeated fields rather than indexed arrays.
+pub fn first_object_string_list(text: &str, field_name: &str) -> Vec<String> {
+    let Ok(doc) = parse_siin(text) else {
+        return Vec::new();
+    };
+    let Some(obj) = doc.objects.first() else {
+        return Vec::new();
+    };
+    obj.fields
+        .iter()
+        .filter(|f| f.name == field_name)
+        .filter_map(|f| match &f.value {
+            SiiValue::String(s) => Some(s.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
-/// Extract a numeric field value.
-pub fn extract_u64_field(sii_text: &str, field_name: &str) -> Option<u64> {
-    extract_field(sii_text, field_name).and_then(|v| v.parse().ok())
-}
-
-/// Extract a boolean field value (true/false).
-pub fn extract_bool_field(sii_text: &str, field_name: &str) -> Option<bool> {
-    extract_field(sii_text, field_name).and_then(|v| match v.as_str() {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    })
-}
-
-/// Extract a floating-point field value.
-pub fn extract_f64_field(sii_text: &str, field_name: &str) -> Option<f64> {
-    extract_field(sii_text, field_name).and_then(|v| v.parse().ok())
-}
-
-/// Extract a u32 field value.
-pub fn extract_u32_field(sii_text: &str, field_name: &str) -> Option<u32> {
-    extract_field(sii_text, field_name).and_then(|v| v.parse().ok())
-}
-
-/// Extract an indexed array of u64 values (e.g. cached_stats[0] through cached_stats[N-1]).
-pub fn extract_indexed_array_u64(sii_text: &str, field_name: &str, count: usize) -> Vec<u64> {
-    let mut result = vec![0u64; count];
-    let prefix = format!("{}[", field_name);
-    for line in sii_text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with(&prefix) {
+/// Parse a single-object SIIN document and extract the `active_mods` indexed
+/// array as `(id, display_name)` pairs in declaration order. Returns an empty
+/// vec on parse failure or if the document has no objects.
+pub fn first_object_active_mods(text: &str) -> Vec<ModEntry> {
+    let Ok(doc) = parse_siin(text) else {
+        return Vec::new();
+    };
+    let Some(obj) = doc.objects.first() else {
+        return Vec::new();
+    };
+    let mut mods: Vec<(usize, ModEntry)> = Vec::new();
+    for field in &obj.fields {
+        let Some(rest) = field.name.strip_prefix("active_mods[") else {
             continue;
-        }
-        if let Some((key, value)) = trimmed.split_once(':') {
-            // Parse index from "field_name[N]"
-            if let Some(idx_str) = key.trim().strip_prefix(&prefix).and_then(|s| s.strip_suffix(']')) {
-                if let Ok(idx) = idx_str.parse::<usize>() {
-                    if idx < count {
-                        if let Ok(val) = value.trim().parse::<u64>() {
-                            result[idx] = val;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    result
-}
-
-/// Check if a profile has an online password set (non-empty).
-pub fn has_online_password(sii_text: &str) -> bool {
-    extract_string_field(sii_text, "online_password")
-        .map(|p| !p.is_empty())
-        .unwrap_or(false)
-}
-
-/// Extract the active_mods array from decoded profile.sii text.
-/// Returns Vec of (mod_id, display_name) tuples.
-pub fn extract_active_mods(sii_text: &str) -> Vec<(String, String)> {
-    let mut mods = Vec::new();
-    for line in sii_text.lines() {
-        let trimmed = line.trim();
-        // Match lines like: active_mods[0]: "mod_workshop_package.xxx|Display Name"
-        if !trimmed.starts_with("active_mods[") {
+        };
+        let Some(idx_str) = rest.strip_suffix(']') else {
             continue;
-        }
-        if let Some((_key, value)) = trimmed.split_once(':') {
-            let val = value.trim().trim_matches('"');
-            if let Some((id, name)) = val.split_once('|') {
-                mods.push((id.to_string(), name.to_string()));
-            }
-        }
+        };
+        let Ok(idx) = idx_str.parse::<usize>() else {
+            continue;
+        };
+        let SiiValue::String(val) = &field.value else {
+            continue;
+        };
+        let (id, display_name) = match val.split_once('|') {
+            Some((id, name)) => (id.to_string(), name.to_string()),
+            None => (val.clone(), val.clone()),
+        };
+        mods.push((idx, ModEntry { id, display_name }));
     }
-    mods
+    mods.sort_by_key(|(idx, _)| *idx);
+    mods.into_iter().map(|(_, m)| m).collect()
 }

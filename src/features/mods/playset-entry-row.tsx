@@ -1,0 +1,118 @@
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/cupertino/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconGripVertical,
+  IconX,
+} from "@tabler/icons-react";
+import { playsetDndId } from "./dnd-ids";
+import type { PlaysetEntry } from "./types";
+
+interface PlaysetEntryRowProps {
+  entry: PlaysetEntry;
+  index: number;
+  total: number;
+  isMissing: boolean;
+  onToggleEnabled: (enabled: boolean) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}
+
+export function PlaysetEntryRow({
+  entry,
+  index,
+  total,
+  isMissing,
+  onToggleEnabled,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: PlaysetEntryRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: playsetDndId(entry.mod_id) });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center gap-2 rounded-md border border-transparent bg-background p-2 text-xs",
+        !entry.enabled && "opacity-50",
+        isMissing && "border-destructive/40 bg-destructive/5",
+        isDragging && "z-10 border-primary shadow-md",
+      )}
+    >
+      <button
+        type="button"
+        className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+        aria-label={`Drag to reorder ${entry.display_name}`}
+        {...attributes}
+        {...listeners}
+      >
+        <IconGripVertical className="size-3.5" />
+      </button>
+
+      <span className="w-6 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+        {index + 1}
+      </span>
+
+      <Switch
+        checked={entry.enabled}
+        onCheckedChange={onToggleEnabled}
+        aria-label={`Toggle ${entry.display_name}`}
+      />
+
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{entry.display_name}</div>
+        {isMissing && (
+          <div className="text-[10px] text-destructive">Missing on disk</div>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onMoveUp}
+          disabled={index === 0}
+          aria-label="Move up"
+        >
+          <IconChevronUp className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onMoveDown}
+          disabled={index === total - 1}
+          aria-label="Move down"
+        >
+          <IconChevronDown className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onRemove}
+          aria-label="Remove from playset"
+        >
+          <IconX className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}

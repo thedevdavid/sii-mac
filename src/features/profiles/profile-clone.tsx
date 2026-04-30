@@ -1,3 +1,5 @@
+import { queryKeys } from "@/lib/query-keys";
+import { formatError, formatFieldErrors } from "@/lib/format-error";
 import { useTransition } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,22 +14,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { cloneProfile } from "@/lib/tauri-commands";
-import type {
-  ProfileSummary,
-  GameInstallation,
-  CloneOptions,
-  ProfileContents,
-} from "@/lib/types";
+import type { GameInstallation } from "@/lib/core-types";
+import {
+  CloneOptionsSchema,
+  type CloneOptions,
+  type ProfileContents,
+  type ProfileSummary,
+} from "@/features/profiles/types";
 import {
   IconCopy,
   IconLoader2,
-  IconChevronRight,
   IconLock,
   IconSettings2,
   IconSchool,
@@ -35,218 +32,24 @@ import {
   IconPuzzle,
   IconWorld,
   IconAlertTriangle,
+  IconInfoCircle,
 } from "@tabler/icons-react";
 import {
   CloneFormSchema,
   PRESET_LABELS,
   PRESET_DESCRIPTIONS,
   type ClonePreset,
-  type CloneFormValues,
 } from "./clone-form-schema";
-import type { ReactNode } from "react";
-
-// --- Utilities ---
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-type CheckState = "all" | "none" | "some";
-
-function groupCheckState(items: string[], selected: string[]): CheckState {
-  if (items.length === 0) return "none";
-  const selectedSet = new Set(selected);
-  const count = items.filter((i) => selectedSet.has(i)).length;
-  if (count === 0) return "none";
-  if (count === items.length) return "all";
-  return "some";
-}
-
-function toggleGroupItems(
-  items: string[],
-  current: string[],
-  state: CheckState,
-): string[] {
-  const currentSet = new Set(current);
-  if (state === "all") {
-    items.forEach((i) => currentSet.delete(i));
-  } else {
-    items.forEach((i) => currentSet.add(i));
-  }
-  return Array.from(currentSet);
-}
-
-function toggleSingleItem(item: string, current: string[]): string[] {
-  const set = new Set(current);
-  if (set.has(item)) set.delete(item);
-  else set.add(item);
-  return Array.from(set);
-}
-
-// --- Preset logic ---
-
-function buildPresetValues(
-  preset: ClonePreset,
-  contents: ProfileContents,
-): Partial<CloneFormValues> {
-  const allConfigPaths = contents.config_files.map((f) => f.path);
-  const allProgressPaths = contents.progress_items.map((f) => f.path);
-  const allSaveNames = contents.save_groups.flatMap((g) =>
-    g.saves.map((s) => s.directory_name),
-  );
-  const allModIds = contents.active_mods.map((m) => m.id);
-
-  switch (preset) {
-    case "complete":
-      return {
-        selectedFiles: [...allConfigPaths, ...allProgressPaths],
-        selectedDirs: contents.progress_items
-          .filter((f) => f.is_dir)
-          .map((f) => f.path),
-        selectedSaves: allSaveNames,
-        selectedMods: allModIds,
-        filterMods: false,
-        includeOnlineProfile: true,
-      };
-    case "recommended":
-      return {
-        selectedFiles: [...allConfigPaths, ...allProgressPaths],
-        selectedDirs: contents.progress_items
-          .filter((f) => f.is_dir)
-          .map((f) => f.path),
-        selectedSaves: [],
-        selectedMods: allModIds,
-        filterMods: false,
-        includeOnlineProfile: false,
-      };
-    case "minimal":
-      return {
-        selectedFiles: allConfigPaths,
-        selectedDirs: [],
-        selectedSaves: [],
-        selectedMods: [],
-        filterMods: true,
-        includeOnlineProfile: false,
-      };
-    case "saves-only":
-      return {
-        selectedFiles: [],
-        selectedDirs: [],
-        selectedSaves: allSaveNames,
-        selectedMods: [],
-        filterMods: true,
-        includeOnlineProfile: false,
-      };
-    case "mods-testing":
-      return {
-        selectedFiles: allConfigPaths,
-        selectedDirs: [],
-        selectedSaves: [],
-        selectedMods: allModIds,
-        filterMods: false,
-        includeOnlineProfile: false,
-      };
-    case "custom":
-      // Don't change selections for custom
-      return {};
-  }
-}
-
-// --- Collapsible group row ---
-
-function GroupRow({
-  icon,
-  label,
-  count,
-  size,
-  state,
-  onToggle,
-  disabled,
-  children,
-}: {
-  icon: ReactNode;
-  label: string;
-  count?: number;
-  size: number;
-  state: CheckState;
-  onToggle: () => void;
-  disabled?: boolean;
-  children?: ReactNode;
-}) {
-  const hasChildren = !!children;
-
-  return (
-    <Collapsible defaultOpen={false}>
-      <div className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50">
-        {hasChildren ? (
-          <CollapsibleTrigger className="group/trigger flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted">
-            <IconChevronRight className="size-3.5 transition-transform group-data-[panel-open]/trigger:rotate-90" />
-          </CollapsibleTrigger>
-        ) : (
-          <span className="size-5" />
-        )}
-        {disabled ? (
-          <IconLock className="size-3.5 text-muted-foreground" />
-        ) : (
-          <Checkbox
-            checked={state !== "none"}
-            indeterminate={state === "some"}
-            onCheckedChange={onToggle}
-          />
-        )}
-        <span className="flex items-center gap-1.5 text-sm">
-          {icon}
-          <span className="font-medium">{label}</span>
-          {count != null && (
-            <Badge variant="secondary" className="ml-1 text-xs">
-              {count}
-            </Badge>
-          )}
-        </span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {formatSize(size)}
-        </span>
-      </div>
-      {hasChildren && (
-        <CollapsibleContent>
-          <div className="ml-7 border-l pl-3">{children}</div>
-        </CollapsibleContent>
-      )}
-    </Collapsible>
-  );
-}
-
-// --- Individual item row ---
-
-function ItemRow({
-  label,
-  size,
-  checked,
-  onToggle,
-  subtitle,
-}: {
-  label: string;
-  size: number;
-  checked: boolean;
-  onToggle: () => void;
-  subtitle?: string;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50">
-      <span className="size-5" />
-      <Checkbox checked={checked} onCheckedChange={onToggle} />
-      <span className="min-w-0 flex-1 text-sm">
-        <span className="truncate">{label}</span>
-        {subtitle && (
-          <span className="ml-2 text-xs text-muted-foreground">{subtitle}</span>
-        )}
-      </span>
-      <span className="text-xs text-muted-foreground">{formatSize(size)}</span>
-    </label>
-  );
-}
+import {
+  formatSize,
+  groupCheckState,
+  toggleGroupItems,
+  toggleSingleItem,
+} from "./clone-utils";
+import { buildPresetValues } from "./clone-presets";
+import { GroupRow, ItemRow } from "./clone-rows";
+import { useProgressStream } from "@/hooks/use-progress-stream";
+import { ProgressOverlay } from "@/components/progress-overlay";
 
 // --- Inner form component (receives loaded data) ---
 
@@ -263,6 +66,7 @@ function CloneForm({
 }) {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
+  const progressStream = useProgressStream();
 
   const allConfigPaths = contents.config_files.map((f) => f.path);
   const allProgressPaths = contents.progress_items.map((f) => f.path);
@@ -297,26 +101,45 @@ function CloneForm({
       onChange: CloneFormSchema,
     },
     onSubmit: ({ value }) => {
-      const options: CloneOptions = {
+      const shouldFilter =
+        value.filterMods || value.selectedMods.length !== allModIds.length;
+      // Parse through the schema so plain-string form values get promoted to
+      // the branded SaveId/ModId types the Tauri command expects.
+      const options: CloneOptions = CloneOptionsSchema.parse({
         include_files: value.selectedFiles,
         include_dirs: value.selectedDirs,
         include_saves: value.selectedSaves,
-        include_mods: value.selectedMods,
-        filter_mods: value.filterMods || value.selectedMods.length !== allModIds.length,
+        mod_strategy: shouldFilter
+          ? { kind: "includeOnly", mods: value.selectedMods }
+          : { kind: "keepAll" },
         include_online_profile: value.includeOnlineProfile,
-      };
+      });
 
+      const { jobId, channel } = progressStream.begin();
       startTransition(async () => {
         try {
-          await cloneProfile(profile.path, value.newProfileName, options);
+          await cloneProfile(
+            profile.path,
+            value.newProfileName,
+            installation.base_path,
+            options,
+            jobId,
+            channel,
+          );
           await queryClient.invalidateQueries({
-            queryKey: ["profiles", installation.profiles_path],
+            queryKey: queryKeys.profiles.list(installation.profiles_path),
           });
           toast.success(`Profile "${value.newProfileName}" created`, {
             description: `Cloned from "${profile.name}".`,
           });
         } catch (err) {
-          toast.error(`Clone failed: ${(err as Error).message ?? err}`);
+          // Failed/Cancelled events already displayed via ProgressOverlay,
+          // but non-streaming errors (schema drift, pre-validation) still
+          // need a toast fallback. Read via getStatus() to avoid a stale
+          // closure over `progressStream.progress`.
+          if (progressStream.getStatus() === "idle") {
+            toast.error(`Clone failed: ${formatError(err)}`);
+          }
         }
       });
     },
@@ -349,6 +172,12 @@ function CloneForm({
 
   return (
     <ScrollArea className="h-full">
+      <ProgressOverlay
+        progress={progressStream.progress}
+        onCancel={() => progressStream.cancel()}
+        onDismiss={() => progressStream.reset()}
+        title="Cloning profile"
+      />
       <div className="space-y-5 p-5">
         <div>
           <h2 className="text-sm font-semibold">Clone Profile</h2>
@@ -356,6 +185,23 @@ function CloneForm({
             Create a copy of {profile.name}. Select what to include.
           </p>
         </div>
+
+        {profile.is_steam_cloud && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+            <IconInfoCircle className="mt-0.5 size-4 shrink-0 text-blue-500" />
+            <div className="text-xs">
+              <p className="font-medium text-blue-500">
+                Steam Cloud profile detected
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                The cloned profile will be created as a <strong>local profile</strong> in
+                the <code className="rounded bg-muted px-1">profiles/</code> directory
+                without Steam Cloud sync. To enable Cloud sync for the clone, use the
+                in-game profile settings after launching the game.
+              </p>
+            </div>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
@@ -383,15 +229,7 @@ function CloneForm({
                 />
                 {field.state.meta.isTouched && !field.state.meta.isValid && (
                   <p className="text-xs text-destructive">
-                    {field.state.meta.errors
-                      .filter(Boolean)
-                      .map((err) => {
-                        if (typeof err === "string") return err;
-                        if (err && typeof err === "object" && "message" in err)
-                          return (err as { message: string }).message;
-                        return String(err);
-                      })
-                      .join(", ")}
+                    {formatFieldErrors(field.state.meta.errors)}
                   </p>
                 )}
               </div>
