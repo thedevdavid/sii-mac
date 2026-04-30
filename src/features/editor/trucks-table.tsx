@@ -1,5 +1,6 @@
-import { useTransition, useRef } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
@@ -27,6 +28,7 @@ import {
   IconLoader2,
 } from "@tabler/icons-react";
 import { updateTruck, updateAllTrucks } from "@/lib/tauri-commands";
+import { queryKeys } from "@/lib/query-keys";
 import type { TruckData } from "@/features/editor/types";
 
 // --- Helpers ---
@@ -331,25 +333,27 @@ interface TrucksTableProps {
   savePath: string;
   trucks: TruckData[];
   playerTruckId: string | null | undefined;
-  onSaved: () => void;
 }
 
 export function TrucksTable({
   savePath,
   trucks,
   playerTruckId,
-  onSaved,
 }: TrucksTableProps) {
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
-  const selectedTruckRef = useRef<TruckData | null>(null);
-  const sheetTriggerRef = useRef<HTMLButtonElement>(null);
+  const [selectedTruck, setSelectedTruck] = useState<TruckData | null>(null);
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
+  }
 
   function handleRepairAll() {
     startTransition(async () => {
       try {
         const count = await updateAllTrucks(savePath, "RepairAll");
         toast.success(`Repaired ${count} trucks`);
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Repair failed: ${(err as Error).message ?? err}`);
       }
@@ -361,7 +365,7 @@ export function TrucksTable({
       try {
         const count = await updateAllTrucks(savePath, "RefuelAll");
         toast.success(`Refueled ${count} trucks`);
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Refuel failed: ${(err as Error).message ?? err}`);
       }
@@ -373,7 +377,7 @@ export function TrucksTable({
       try {
         await updateTruck(savePath, truck.id, { repair: true });
         toast.success("Truck repaired");
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Failed: ${(err as Error).message ?? err}`);
       }
@@ -385,7 +389,7 @@ export function TrucksTable({
       try {
         await updateTruck(savePath, truck.id, { refuel: true });
         toast.success("Truck refueled");
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Failed: ${(err as Error).message ?? err}`);
       }
@@ -400,10 +404,7 @@ export function TrucksTable({
         columns={columns}
         data={trucks}
         emptyMessage="No trucks found"
-        onRowClick={(truck) => {
-          selectedTruckRef.current = truck;
-          sheetTriggerRef.current?.click();
-        }}
+        onRowClick={(truck) => setSelectedTruck(truck)}
         toolbar={
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
@@ -433,20 +434,16 @@ export function TrucksTable({
         }
       />
 
-      {/* Hidden sheet trigger + sheet */}
-      <Sheet>
-        <button ref={sheetTriggerRef} className="hidden" data-sheet-trigger="" />
-        {selectedTruckRef.current && (
+      {selectedTruck && (
+        <Sheet open onOpenChange={(open) => { if (!open) setSelectedTruck(null); }}>
           <TruckDetailSheet
-            truck={selectedTruckRef.current}
+            truck={selectedTruck}
             savePath={savePath}
-            onClose={() => {
-              selectedTruckRef.current = null;
-            }}
-            onSaved={onSaved}
+            onClose={() => setSelectedTruck(null)}
+            onSaved={invalidate}
           />
-        )}
-      </Sheet>
+        </Sheet>
+      )}
     </>
   );
 }

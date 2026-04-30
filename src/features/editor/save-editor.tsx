@@ -10,6 +10,7 @@ import {
   EmptyDescription,
 } from "@/components/ui/empty";
 import { IconAlertTriangle } from "@tabler/icons-react";
+import { isGarageOwned } from "@/features/editor/types";
 import { PlayerEditor } from "./player-editor";
 import { TrucksTable } from "./trucks-table";
 import { TrailersTable } from "./trailers-table";
@@ -76,7 +77,7 @@ export function SaveEditor({ savePath, saveName, game }: SaveEditorProps) {
             <TabsTrigger value="world">
               World
               <Badge variant="secondary" className="ml-1.5">
-                {data.garages.filter((g) => g.status > 0).length}/
+                {data.garages.filter((g) => isGarageOwned(g.status)).length}/
                 {data.garages.length}
               </Badge>
             </TabsTrigger>

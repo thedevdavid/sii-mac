@@ -1,5 +1,6 @@
-import { useTransition, useRef } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
@@ -20,6 +21,7 @@ import {
 } from "@/components/cupertino/sheet";
 import { IconTool, IconStar, IconLoader2 } from "@tabler/icons-react";
 import { updateTrailer, repairAllTrailers } from "@/lib/tauri-commands";
+import { queryKeys } from "@/lib/query-keys";
 import type { TrailerData } from "@/features/editor/types";
 
 const col = createColumnHelper<TrailerData>();
@@ -262,25 +264,27 @@ interface TrailersTableProps {
   savePath: string;
   trailers: TrailerData[];
   playerTrailerId: string | null | undefined;
-  onSaved: () => void;
 }
 
 export function TrailersTable({
   savePath,
   trailers,
   playerTrailerId,
-  onSaved,
 }: TrailersTableProps) {
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
-  const selectedRef = useRef<TrailerData | null>(null);
-  const sheetTriggerRef = useRef<HTMLButtonElement>(null);
+  const [selectedTrailer, setSelectedTrailer] = useState<TrailerData | null>(null);
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
+  }
 
   function handleRepairAll() {
     startTransition(async () => {
       try {
         const count = await repairAllTrailers(savePath);
         toast.success(`Repaired ${count} trailers`);
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Failed: ${(err as Error).message ?? err}`);
       }
@@ -292,7 +296,7 @@ export function TrailersTable({
       try {
         await updateTrailer(savePath, trailer.id, { repair: true });
         toast.success("Trailer repaired");
-        onSaved();
+        invalidate();
       } catch (err) {
         toast.error(`Failed: ${(err as Error).message ?? err}`);
       }
@@ -307,10 +311,7 @@ export function TrailersTable({
         columns={columns}
         data={trailers}
         emptyMessage="No trailers found"
-        onRowClick={(trailer) => {
-          selectedRef.current = trailer;
-          sheetTriggerRef.current?.click();
-        }}
+        onRowClick={(trailer) => setSelectedTrailer(trailer)}
         toolbar={
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
@@ -329,17 +330,16 @@ export function TrailersTable({
         }
       />
 
-      <Sheet>
-        <button ref={sheetTriggerRef} className="hidden" />
-        {selectedRef.current && (
+      {selectedTrailer && (
+        <Sheet open onOpenChange={(open) => { if (!open) setSelectedTrailer(null); }}>
           <TrailerDetailSheet
-            trailer={selectedRef.current}
+            trailer={selectedTrailer}
             savePath={savePath}
-            onClose={() => { selectedRef.current = null; }}
-            onSaved={onSaved}
+            onClose={() => setSelectedTrailer(null)}
+            onSaved={invalidate}
           />
-        )}
-      </Sheet>
+        </Sheet>
+      )}
     </>
   );
 }

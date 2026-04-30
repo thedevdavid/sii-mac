@@ -62,12 +62,14 @@ export function useInvalidatingMutation<TData = void, TVars = void, TContext = u
 
 export function useUpdatePlayerData(savePath: string) {
   const queryClient = useQueryClient();
+  const profilePath = savePath.replace(/\/save\/[^/]+$/, "");
   return useMutation({
     mutationFn: (changes: { money?: number; experience?: number }) =>
       updatePlayerData(savePath, changes),
     onSuccess: () => {
       toast.success("Player data saved");
       queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.profiles.detail(profilePath) });
     },
     onError: (err) => toast.error(`Save failed: ${formatError(err)}`),
   });
