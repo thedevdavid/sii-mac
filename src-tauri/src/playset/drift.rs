@@ -3,6 +3,8 @@
 //!
 //! All logic is a pure function so tests don't need a filesystem.
 
+use std::collections::HashSet;
+
 use crate::profile::models::ModEntry;
 
 use super::models::{DriftReport, Playset, PlaysetEntry};
@@ -23,16 +25,18 @@ pub fn compute_drift(
     let enabled: Vec<&PlaysetEntry> = playset.entries.iter().filter(|e| e.enabled).collect();
     let enabled_ids: Vec<&str> = enabled.iter().map(|e| e.mod_id.as_str()).collect();
     let live_ids: Vec<&str> = live.iter().map(|m| m.id.as_str()).collect();
+    let enabled_set: HashSet<&str> = enabled_ids.iter().copied().collect();
+    let live_set: HashSet<&str> = live_ids.iter().copied().collect();
 
     let missing_in_profile: Vec<ModEntry> = enabled
         .iter()
-        .filter(|e| !live_ids.contains(&e.mod_id.as_str()))
+        .filter(|e| !live_set.contains(e.mod_id.as_str()))
         .map(|e| e.to_mod_entry())
         .collect();
 
     let extra_in_profile: Vec<ModEntry> = live
         .iter()
-        .filter(|m| !enabled_ids.contains(&m.id.as_str()))
+        .filter(|m| !enabled_set.contains(m.id.as_str()))
         .cloned()
         .collect();
 
@@ -70,6 +74,7 @@ mod tests {
             display_name: id.into(),
             enabled,
             order,
+            ..Default::default()
         }
     }
 

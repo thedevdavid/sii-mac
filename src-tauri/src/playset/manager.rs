@@ -43,6 +43,24 @@ where
     Ok(result)
 }
 
+/// Read-only variant of `with_installation`. Loads from the cache (or disk on
+/// first hit) and runs the closure without writing back. Use for any command
+/// that only reads.
+fn with_installation_ro<F, R>(
+    app_handle: &AppHandle,
+    base_path: &str,
+    f: F,
+) -> Result<R, AppError>
+where
+    F: FnOnce(&InstallationPlaysets) -> Result<R, AppError>,
+{
+    let _guard = PLAYSET_LOCK
+        .lock()
+        .map_err(|e| AppError::Store(format!("playset lock poisoned: {e}")))?;
+    let inst = load_installation(app_handle, base_path)?;
+    f(&inst)
+}
+
 fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }
@@ -80,6 +98,7 @@ pub fn seed_temporary_from_live_mods(live: Vec<ModEntry>) -> Playset {
             display_name: m.display_name,
             enabled: true,
             order: i as u32,
+            locked: false,
         })
         .collect();
     Playset {
@@ -172,8 +191,7 @@ pub fn list_playsets(
     app_handle: &AppHandle,
     base_path: &str,
 ) -> Result<Vec<Playset>, AppError> {
-    let inst = load_installation(app_handle, base_path)?;
-    Ok(inst.playsets)
+    with_installation_ro(app_handle, base_path, |inst| Ok(inst.playsets.clone()))
 }
 
 pub fn get_playset(
@@ -181,10 +199,11 @@ pub fn get_playset(
     base_path: &str,
     playset_id: &str,
 ) -> Result<Playset, AppError> {
-    let inst = load_installation(app_handle, base_path)?;
-    inst.find_playset(playset_id)
-        .cloned()
-        .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))
+    with_installation_ro(app_handle, base_path, |inst| {
+        inst.find_playset(playset_id)
+            .cloned()
+            .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))
+    })
 }
 
 pub fn create_playset(
@@ -340,6 +359,30 @@ pub fn toggle_entry_enabled(
     })
 }
 
+pub fn toggle_entry_locked(
+    app_handle: &AppHandle,
+    base_path: &str,
+    playset_id: &str,
+    mod_id: &str,
+    locked: bool,
+) -> Result<Playset, AppError> {
+    with_installation(app_handle, base_path, |inst| {
+        let playset = inst
+            .find_playset_mut(playset_id)
+            .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+        let entry = playset
+            .entries
+            .iter_mut()
+            .find(|e| e.mod_id == mod_id)
+            .ok_or_else(|| {
+                AppError::PlaysetInvalid(format!("mod_id '{mod_id}' not in playset"))
+            })?;
+        entry.locked = locked;
+        playset.updated_at = now_rfc3339();
+        Ok(playset.clone())
+    })
+}
+
 pub fn add_mod_to_playset(
     app_handle: &AppHandle,
     base_path: &str,
@@ -362,6 +405,7 @@ pub fn add_mod_to_playset(
             display_name: display_name.to_string(),
             enabled: true,
             order,
+            locked: false,
         });
         playset.updated_at = now_rfc3339();
         Ok(playset.clone())
@@ -429,9 +473,28 @@ pub fn get_active_playset(
     base_path: &str,
     profile_path: &str,
 ) -> Result<Playset, AppError> {
-    with_installation(app_handle, base_path, |inst| {
-        let canon = canonical_profile_path(profile_path);
+    let canon = canonical_profile_path(profile_path);
 
+    // Fast read-only path: an active playset is already wired up. Avoids the
+    // disk write that the previous unconditional `with_installation` did.
+    if let Some(playset) = with_installation_ro(app_handle, base_path, |inst| {
+        Ok(inst
+            .profile_states
+            .get(&canon)
+            .and_then(|s| s.active_playset_id.as_ref())
+            .and_then(|id| inst.find_playset(id))
+            .cloned())
+    })? {
+        return Ok(playset);
+    }
+
+    // Slow path: no active playset yet — seed a temporary from live active_mods.
+    // Read the profile.sii outside the playset lock.
+    let live = read_live_active_mods(profile_path)?;
+
+    with_installation(app_handle, base_path, |inst| {
+        // Re-check inside the write lock in case another caller seeded one
+        // between our RO read and the write lock.
         if let Some(state) = inst.profile_states.get(&canon) {
             if let Some(id) = &state.active_playset_id {
                 if let Some(playset) = inst.find_playset(id) {
@@ -440,15 +503,13 @@ pub fn get_active_playset(
             }
         }
 
-        // Seed a temporary playset from the profile's live active_mods.
-        let live = read_live_active_mods(profile_path)?;
-        let mut playset = seed_temporary_from_live_mods(live);
+        let mut playset = seed_temporary_from_live_mods(live.clone());
         let playset_id = playset.id.clone();
         let snapshot = playset.entries.clone();
         canonicalize_entries(&mut playset.entries);
         inst.playsets.push(playset.clone());
 
-        let state = inst.profile_states.entry(canon).or_default();
+        let state = inst.profile_states.entry(canon.clone()).or_default();
         state.active_playset_id = Some(playset_id.clone());
         state.last_applied_playset_id = Some(playset_id);
         state.last_applied_at = Some(now_rfc3339());
@@ -522,8 +583,10 @@ pub fn apply_playset(
         let playset = inst
             .find_playset(playset_id)
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
-        let live = read_live_active_mods(profile_path)?;
-        Ok(compute_drift(&live, playset, Some(&snapshot)))
+        // We just wrote `entries_to_write` to profile.sii — they are the live
+        // state. Skip the expensive re-read + SII parse and feed the
+        // just-written entries directly into compute_drift.
+        Ok(compute_drift(&entries_to_write, playset, Some(&snapshot)))
     })
 }
 
@@ -543,6 +606,13 @@ pub fn accept_playset_drift(
 
         // Overwrite entries from live. Preserve enabled flag where possible
         // (if a mod is enabled in live, it stays enabled in the playset).
+        // Carry the user's lock flags across the drift accept so a re-sync
+        // doesn't silently unlock previously-pinned entries.
+        let prior_locked: std::collections::HashMap<&str, bool> = playset
+            .entries
+            .iter()
+            .map(|e| (e.mod_id.as_str(), e.locked))
+            .collect();
         let new_entries: Vec<PlaysetEntry> = live
             .iter()
             .enumerate()
@@ -551,6 +621,7 @@ pub fn accept_playset_drift(
                 display_name: m.display_name.clone(),
                 enabled: true,
                 order: i as u32,
+                locked: prior_locked.get(m.id.as_str()).copied().unwrap_or(false),
             })
             .collect();
         playset.entries = new_entries.clone();
@@ -573,23 +644,24 @@ pub fn compute_playset_drift(
     profile_path: &str,
     playset_id: &str,
 ) -> Result<DriftReport, AppError> {
-    let inst = load_installation(app_handle, base_path)?;
-    let playset = inst
-        .find_playset(playset_id)
-        .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+    // Read live active_mods outside the playset lock — it's a filesystem +
+    // SII parse and the lock would needlessly block other commands.
+    let live = read_live_active_mods(profile_path)?;
     let canon = canonical_profile_path(profile_path);
-    let snapshot = inst
-        .profile_states
-        .get(&canon)
-        .and_then(|s| {
+
+    with_installation_ro(app_handle, base_path, |inst| {
+        let playset = inst
+            .find_playset(playset_id)
+            .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+        let snapshot = inst.profile_states.get(&canon).and_then(|s| {
             if s.last_applied_playset_id.as_deref() == Some(playset_id) {
                 Some(s.last_applied_snapshot.as_slice())
             } else {
                 None
             }
         });
-    let live = read_live_active_mods(profile_path)?;
-    Ok(compute_drift(&live, playset, snapshot))
+        Ok(compute_drift(&live, playset, snapshot))
+    })
 }
 
 /// Read live active_mods from profile.sii. Exposed pub(crate) so it can be
@@ -678,12 +750,14 @@ mod tests {
                 display_name: "a".into(),
                 enabled: true,
                 order: 99,
+                ..Default::default()
             },
             PlaysetEntry {
                 mod_id: "b".into(),
                 display_name: "b".into(),
                 enabled: false,
                 order: 3,
+                ..Default::default()
             },
         ];
         canonicalize_entries(&mut entries);
@@ -699,18 +773,21 @@ mod tests {
                 display_name: "A".into(),
                 enabled: true,
                 order: 0,
+                ..Default::default()
             },
             PlaysetEntry {
                 mod_id: "b".into(),
                 display_name: "B".into(),
                 enabled: false,
                 order: 1,
+                ..Default::default()
             },
             PlaysetEntry {
                 mod_id: "c".into(),
                 display_name: "C".into(),
                 enabled: true,
                 order: 2,
+                ..Default::default()
             },
         ];
         let mods = entries_to_mod_entries(&entries);
@@ -760,18 +837,21 @@ mod tests {
                 display_name: "A".into(),
                 enabled: true,
                 order: 0,
+                ..Default::default()
             },
             PlaysetEntry {
                 mod_id: "b".into(),
                 display_name: "B".into(),
                 enabled: true,
                 order: 1,
+                ..Default::default()
             },
             PlaysetEntry {
                 mod_id: "c".into(),
                 display_name: "C".into(),
                 enabled: true,
                 order: 2,
+                ..Default::default()
             },
         ];
         reorder_entries(&mut entries, &["c".into(), "a".into(), "b".into()]).unwrap();
@@ -789,6 +869,7 @@ mod tests {
             display_name: "A".into(),
             enabled: true,
             order: 0,
+            ..Default::default()
         }];
         let result = reorder_entries(&mut entries, &["x".into()]);
         assert!(result.is_err());
@@ -801,6 +882,7 @@ mod tests {
             display_name: "A".into(),
             enabled: true,
             order: 0,
+            ..Default::default()
         }];
         let result = reorder_entries(&mut entries, &["a".into(), "b".into()]);
         assert!(result.is_err());

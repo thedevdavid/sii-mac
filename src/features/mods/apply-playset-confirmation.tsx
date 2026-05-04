@@ -10,12 +10,12 @@ import {
 } from "@/components/cupertino/alert-dialog";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { IconAlertTriangle } from "@tabler/icons-react";
-import type { Playset, DriftReport } from "./types";
-import type { FullModInfo } from "./types";
+import type { ModId } from "@/lib/core-types";
+import type { Playset, DriftReport, FullModInfo } from "./types";
 
 interface ApplyPlaysetConfirmationProps {
   playset: Playset | null;
-  installationMods: FullModInfo[] | undefined;
+  modsById: ReadonlyMap<ModId, FullModInfo>;
   drift: DriftReport | undefined;
   open: boolean;
   onConfirm: () => void;
@@ -25,14 +25,17 @@ interface ApplyPlaysetConfirmationProps {
 
 export function ApplyPlaysetConfirmation({
   playset,
-  installationMods,
+  modsById,
   drift,
   open,
   onConfirm,
   onOpenChange,
   isBusy,
 }: ApplyPlaysetConfirmationProps) {
-  if (!playset) {
+  // The dialog is always mounted as a sibling — render the cheapest possible
+  // tree when closed so opening another dialog or re-rendering the parent
+  // doesn't iterate `playset.entries` / build sets unnecessarily.
+  if (!open || !playset) {
     return (
       <AlertDialog open={open} onOpenChange={onOpenChange}>
         <AlertDialogContent />
@@ -41,10 +44,7 @@ export function ApplyPlaysetConfirmation({
   }
 
   const enabledEntries = playset.entries.filter((e) => e.enabled);
-  const installedIds = new Set((installationMods ?? []).map((m) => m.id));
-  const missingOnDisk = enabledEntries.filter(
-    (e) => !installedIds.has(e.mod_id),
-  );
+  const missingOnDisk = enabledEntries.filter((e) => !modsById.has(e.mod_id));
 
   const addingIds = drift?.missing_in_profile.map((m) => m.id) ?? [];
   const removingIds = drift?.extra_in_profile.map((m) => m.id) ?? [];

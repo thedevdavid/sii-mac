@@ -30,12 +30,16 @@ pub struct Playset {
 
 /// One mod within a playset. `enabled: false` entries are skipped when the
 /// playset is applied. `order` matches vector position after every write.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// `locked` pins the entry's absolute index during auto-reorder; older
+/// playset files without this field default to unlocked via serde.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PlaysetEntry {
     pub mod_id: String,
     pub display_name: String,
     pub enabled: bool,
     pub order: u32,
+    #[serde(default)]
+    pub locked: bool,
 }
 
 impl PlaysetEntry {
@@ -158,10 +162,20 @@ mod tests {
             display_name: "Test Mod".into(),
             enabled: true,
             order: 5,
+            ..Default::default()
         };
         let json = serde_json::to_string(&entry).unwrap();
         let parsed: PlaysetEntry = serde_json::from_str(&json).unwrap();
         assert_eq!(entry, parsed);
+    }
+
+    #[test]
+    fn test_playset_entry_locked_defaults_to_false_when_missing() {
+        // Old playsets.json files predate the `locked` field — they must
+        // round-trip without errors and produce `locked: false`.
+        let json = r#"{"mod_id":"x","display_name":"X","enabled":true,"order":0}"#;
+        let parsed: PlaysetEntry = serde_json::from_str(json).unwrap();
+        assert!(!parsed.locked);
     }
 
     #[test]

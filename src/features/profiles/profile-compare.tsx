@@ -226,21 +226,20 @@ export function ProfileCompare({
   const { data: detailA, isLoading: loadingA } = useProfileDetail(brandedA);
   const { data: detailB, isLoading: loadingB } = useProfileDetail(brandedB);
 
-  const allProfiles: {
-    profile: ProfileSummary;
-    installation: GameInstallation;
-  }[] = [];
+  // Single index of profile-path → installation. Both gameA/gameB lookups
+  // share it instead of building a flat list and `.find()`-ing twice.
+  const installationByProfilePath = new Map<string, GameInstallation>();
   for (const inst of installations) {
     const profiles = profilesByInstallation.get(inst.base_path) ?? [];
     for (const p of profiles) {
-      allProfiles.push({ profile: p, installation: inst });
+      installationByProfilePath.set(p.path, inst);
     }
   }
 
   const gameA: Game =
-    allProfiles.find((p) => p.profile.path === pathA)?.installation.game ?? "ats";
+    (pathA ? installationByProfilePath.get(pathA)?.game : undefined) ?? "ats";
   const gameB: Game =
-    allProfiles.find((p) => p.profile.path === pathB)?.installation.game ?? "ats";
+    (pathB ? installationByProfilePath.get(pathB)?.game : undefined) ?? "ats";
 
   function handleSelectA(path: string) {
     navigate({ search: (prev) => ({ ...prev, pathA: path || undefined }) });

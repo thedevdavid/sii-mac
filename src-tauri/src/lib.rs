@@ -63,6 +63,7 @@ pub fn run() {
             commands::playsets::update_playset_metadata,
             commands::playsets::set_playset_entries,
             commands::playsets::toggle_entry_enabled,
+            commands::playsets::toggle_entry_locked,
             commands::playsets::add_mod_to_playset,
             commands::playsets::remove_mod_from_playset,
             commands::playsets::reorder_playset_entries,

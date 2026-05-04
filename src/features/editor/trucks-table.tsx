@@ -30,6 +30,7 @@ import {
 import { updateTruck, updateAllTrucks } from "@/lib/tauri-commands";
 import { queryKeys } from "@/lib/query-keys";
 import type { TruckData } from "@/features/editor/types";
+import type { SavePath, TruckId } from "@/lib/core-types";
 
 // --- Helpers ---
 
@@ -62,7 +63,7 @@ function wearVariant(
 const col = createColumnHelper<TruckData>();
 
 function createColumns(
-  playerTruckId: string | null | undefined,
+  playerTruckId: TruckId | null | undefined,
   onRepair: (truck: TruckData) => void,
   onRefuel: (truck: TruckData) => void,
   isPending: boolean,
@@ -173,7 +174,7 @@ function TruckDetailSheet({
   onSaved,
 }: {
   truck: TruckData;
-  savePath: string;
+  savePath: SavePath;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -261,7 +262,9 @@ function TruckDetailSheet({
               </div>
               <Slider
                 value={[field.state.value]}
-                onValueChange={([v]) => field.handleChange(v)}
+                onValueChange={(v) =>
+                  field.handleChange(Array.isArray(v) ? v[0] : v)
+                }
                 max={100}
                 step={1}
               />
@@ -289,7 +292,9 @@ function TruckDetailSheet({
                 </div>
                 <Slider
                   value={[field.state.value]}
-                  onValueChange={([v]) => field.handleChange(v)}
+                  onValueChange={(v) =>
+                    field.handleChange(Array.isArray(v) ? v[0] : v)
+                  }
                   max={100}
                   step={1}
                 />
@@ -330,9 +335,9 @@ function TruckDetailSheet({
 // --- Main component ---
 
 interface TrucksTableProps {
-  savePath: string;
+  savePath: SavePath;
   trucks: TruckData[];
-  playerTruckId: string | null | undefined;
+  playerTruckId: TruckId | null | undefined;
 }
 
 export function TrucksTable({

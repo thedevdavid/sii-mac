@@ -25,6 +25,8 @@ import {
   ItemDescription,
   ItemActions,
 } from "@/components/ui/item";
+import { NativeSelect } from "@/components/ui/native-select";
+import { useAutoFixMode } from "@/hooks/use-autofix-mode";
 import { IconFolderPlus, IconTrash, IconRefresh } from "@tabler/icons-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -40,6 +42,7 @@ function SettingsPage() {
   const { data: installations } = useGameDetection();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
+  const [autoFixMode, setAutoFixMode] = useAutoFixMode();
 
   const [vibrancyMode, setVibrancyMode] = React.useState<"css" | "native">(
     () =>
@@ -201,6 +204,36 @@ function SettingsPage() {
             <IconFolderPlus className="size-3.5" />
             Add Directory
           </Button>
+        </div>
+
+        {/* Mods */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Mods
+          </h3>
+          <ItemGroup>
+            <Item variant="outline">
+              <ItemContent>
+                <ItemTitle>Auto-fix order behavior</ItemTitle>
+                <ItemDescription>
+                  Choose whether the playset auto-fix opens a preview dialog or
+                  applies the new order immediately.
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <NativeSelect
+                  value={autoFixMode}
+                  onChange={(e) =>
+                    setAutoFixMode(e.target.value as typeof autoFixMode)
+                  }
+                  className="w-48"
+                >
+                  <option value="preview">Preview before applying</option>
+                  <option value="immediate">Apply immediately</option>
+                </NativeSelect>
+              </ItemActions>
+            </Item>
+          </ItemGroup>
         </div>
 
         {/* Game Config */}

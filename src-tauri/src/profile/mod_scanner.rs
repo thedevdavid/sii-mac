@@ -6,10 +6,11 @@
 //! profile-independent, so callers cache the result at the installation level
 //! and overlay the per-profile active/missing state on top in pure code.
 //!
-//! Caching: an in-memory cache keyed by canonicalized base_path avoids walking
-//! the filesystem on repeated calls within a single app session. Mutations
-//! that change the on-disk mod set (currently only `delete_local_mod`) must
-//! call `invalidate_installation_mods_cache` to drop the stale entry.
+//! Caching: a two-tier cache (in-memory + disk) keyed by canonicalized
+//! base_path avoids re-walking the filesystem. The disk tier survives app
+//! restarts and is read once per process. Mutations that change the on-disk
+//! mod set (currently only `delete_local_mod`) must call
+//! `invalidate_installation_mods_cache` to drop both tiers.
 
 use std::collections::HashMap;
 use std::fs;
@@ -18,6 +19,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
+use tauri_plugin_store::StoreExt;
 
 use crate::error::AppError;
 use crate::profile::models::{FullModInfo, ModSource, ModStatus};
@@ -26,10 +30,46 @@ use crate::sii;
 static SCAN_CACHE: LazyLock<Mutex<HashMap<String, Vec<FullModInfo>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+const DISK_CACHE_FILE: &str = "mod_scan_cache.json";
+
+#[derive(Serialize, Deserialize)]
+struct DiskScanEntry {
+    mods: Vec<FullModInfo>,
+}
+
 fn cache_key(base_path: &str) -> String {
     std::fs::canonicalize(base_path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| base_path.to_string())
+}
+
+fn load_from_disk(app_handle: &AppHandle, key: &str) -> Option<Vec<FullModInfo>> {
+    let store = app_handle.store(DISK_CACHE_FILE).ok()?;
+    let raw = store.get(key)?;
+    let entry: DiskScanEntry = serde_json::from_value(raw).ok()?;
+    Some(entry.mods)
+}
+
+fn save_to_disk(app_handle: &AppHandle, key: &str, mods: &[FullModInfo]) {
+    let Ok(store) = app_handle.store(DISK_CACHE_FILE) else {
+        return;
+    };
+    let entry = DiskScanEntry {
+        mods: mods.to_vec(),
+    };
+    let Ok(value) = serde_json::to_value(&entry) else {
+        return;
+    };
+    store.set(key, value);
+    let _ = store.save();
+}
+
+fn remove_from_disk(app_handle: &AppHandle, key: &str) {
+    let Ok(store) = app_handle.store(DISK_CACHE_FILE) else {
+        return;
+    };
+    store.delete(key);
+    let _ = store.save();
 }
 
 /// Scan every mod available in a game installation. Workshop items that lack
@@ -40,10 +80,14 @@ fn cache_key(base_path: &str) -> String {
 /// per-profile active/missing state themselves. Results are unsorted; callers
 /// typically re-sort after merging with profile data.
 ///
-/// Results are cached in-process keyed by canonical base_path. Mutations that
-/// alter the mod directory (file delete, future add/rename) must call
-/// `invalidate_installation_mods_cache` to drop the stale entry.
-pub fn scan_installation_mods(base_path: &str) -> Result<Vec<FullModInfo>, AppError> {
+/// Results are cached two ways: an in-process map for hot calls, plus a
+/// JSON file on disk that survives restarts (so the first scan after launch
+/// doesn't re-walk every workshop folder). Mutations that alter the mod
+/// directory must call `invalidate_installation_mods_cache` to drop both.
+pub fn scan_installation_mods(
+    app_handle: Option<&AppHandle>,
+    base_path: &str,
+) -> Result<Vec<FullModInfo>, AppError> {
     let key = cache_key(base_path);
 
     if let Ok(cache) = SCAN_CACHE.lock() {
@@ -52,10 +96,22 @@ pub fn scan_installation_mods(base_path: &str) -> Result<Vec<FullModInfo>, AppEr
         }
     }
 
+    if let Some(handle) = app_handle {
+        if let Some(mods) = load_from_disk(handle, &key) {
+            if let Ok(mut cache) = SCAN_CACHE.lock() {
+                cache.insert(key.clone(), mods.clone());
+            }
+            return Ok(mods);
+        }
+    }
+
     let mods = scan_installation_mods_uncached(base_path)?;
 
     if let Ok(mut cache) = SCAN_CACHE.lock() {
-        cache.insert(key, mods.clone());
+        cache.insert(key.clone(), mods.clone());
+    }
+    if let Some(handle) = app_handle {
+        save_to_disk(handle, &key, &mods);
     }
 
     Ok(mods)
@@ -64,10 +120,13 @@ pub fn scan_installation_mods(base_path: &str) -> Result<Vec<FullModInfo>, AppEr
 /// Drop the cache entry for the given installation. Call after any mutation
 /// that changes the mod directory (e.g. `delete_local_mod`) so the next scan
 /// observes the new state.
-pub fn invalidate_installation_mods_cache(base_path: &str) {
+pub fn invalidate_installation_mods_cache(app_handle: Option<&AppHandle>, base_path: &str) {
     let key = cache_key(base_path);
     if let Ok(mut cache) = SCAN_CACHE.lock() {
         cache.remove(&key);
+    }
+    if let Some(handle) = app_handle {
+        remove_from_disk(handle, &key);
     }
 }
 
@@ -440,7 +499,7 @@ mod tests {
     #[test]
     fn test_scan_empty_installation_returns_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = scan_installation_mods(tmp.path().to_str().unwrap()).unwrap();
+        let result = scan_installation_mods(None, tmp.path().to_str().unwrap()).unwrap();
         // No `mod/` subdir and no workshop dirs configured — the function
         // should return cleanly with no panic.
         assert!(
@@ -475,8 +534,8 @@ mod_package : .package {
         let tmp = tempfile::tempdir().unwrap();
         let base = tmp.path().to_str().unwrap().to_string();
 
-        let first = scan_installation_mods(&base).unwrap();
-        let second = scan_installation_mods(&base).unwrap();
+        let first = scan_installation_mods(None, &base).unwrap();
+        let second = scan_installation_mods(None, &base).unwrap();
 
         assert_eq!(first.len(), second.len());
         // Prove the cache is actually holding an entry by inspecting it.
@@ -490,11 +549,11 @@ mod_package : .package {
         let tmp = tempfile::tempdir().unwrap();
         let base = tmp.path().to_str().unwrap().to_string();
 
-        let _ = scan_installation_mods(&base).unwrap();
+        let _ = scan_installation_mods(None, &base).unwrap();
         let key = cache_key(&base);
         assert!(SCAN_CACHE.lock().unwrap().contains_key(&key));
 
-        invalidate_installation_mods_cache(&base);
+        invalidate_installation_mods_cache(None, &base);
         assert!(!SCAN_CACHE.lock().unwrap().contains_key(&key));
     }
 }

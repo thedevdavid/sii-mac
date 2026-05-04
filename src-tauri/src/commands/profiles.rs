@@ -131,19 +131,31 @@ pub fn delete_profile(profile_path: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn scan_installation_mods(base_path: String) -> Result<Vec<FullModInfo>, AppError> {
-    mod_scanner::scan_installation_mods(&base_path)
+pub fn scan_installation_mods(
+    app_handle: tauri::AppHandle,
+    base_path: String,
+) -> Result<Vec<FullModInfo>, AppError> {
+    mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)
 }
 
 #[tauri::command]
-pub fn refresh_installation_mods(base_path: String) -> Result<Vec<FullModInfo>, AppError> {
-    mod_scanner::invalidate_installation_mods_cache(&base_path);
-    mod_scanner::scan_installation_mods(&base_path)
+pub fn refresh_installation_mods(
+    app_handle: tauri::AppHandle,
+    base_path: String,
+) -> Result<Vec<FullModInfo>, AppError> {
+    mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
+    mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)
 }
 
 #[tauri::command]
-pub fn delete_local_mod(base_path: String, mod_id: String) -> Result<(), AppError> {
-    mod_writer::delete_local_mod(&base_path, &mod_id)
+pub fn delete_local_mod(
+    app_handle: tauri::AppHandle,
+    base_path: String,
+    mod_id: String,
+) -> Result<(), AppError> {
+    mod_writer::delete_local_mod(&base_path, &mod_id)?;
+    mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
+    Ok(())
 }
 
 // --- Store helpers ---

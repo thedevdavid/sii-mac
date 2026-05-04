@@ -12,6 +12,7 @@ import {
 import { IconLoader2 } from "@tabler/icons-react";
 import { useUpdatePlayerData } from "@/hooks/use-mutations";
 import type { BankData, EconomyData, PlayerData } from "@/features/editor/types";
+import type { SavePath } from "@/lib/core-types";
 import { calculateLevel } from "@/lib/level-calc";
 
 const PlayerFormSchema = z.object({
@@ -20,7 +21,7 @@ const PlayerFormSchema = z.object({
 });
 
 interface PlayerEditorProps {
-  savePath: string;
+  savePath: SavePath;
   bank: BankData;
   player: PlayerData;
   economy: EconomyData;

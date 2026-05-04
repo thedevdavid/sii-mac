@@ -23,11 +23,12 @@ import { IconTool, IconStar, IconLoader2 } from "@tabler/icons-react";
 import { updateTrailer, repairAllTrailers } from "@/lib/tauri-commands";
 import { queryKeys } from "@/lib/query-keys";
 import type { TrailerData } from "@/features/editor/types";
+import type { SavePath, TrailerId } from "@/lib/core-types";
 
 const col = createColumnHelper<TrailerData>();
 
 function createColumns(
-  playerTrailerId: string | null | undefined,
+  playerTrailerId: TrailerId | null | undefined,
   onRepair: (t: TrailerData) => void,
   isPending: boolean,
 ) {
@@ -123,7 +124,7 @@ function TrailerDetailSheet({
   onSaved,
 }: {
   trailer: TrailerData;
-  savePath: string;
+  savePath: SavePath;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -261,9 +262,9 @@ function TrailerDetailSheet({
 // --- Main ---
 
 interface TrailersTableProps {
-  savePath: string;
+  savePath: SavePath;
   trailers: TrailerData[];
-  playerTrailerId: string | null | undefined;
+  playerTrailerId: TrailerId | null | undefined;
 }
 
 export function TrailersTable({

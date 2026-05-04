@@ -266,6 +266,21 @@ profile_save : .profile {
     }
 
     #[test]
+    #[ignore]
+    fn dump_original_xp() {
+        let path = "/Users/thedevdavid/Library/Application Support/CrossOver/Bottles/Steam/drive_c/Program Files (x86)/Steam/userdata/79367054/270880/remote/profiles/4A75737453747265737365644F75742D4E4F4D4F44/save/autosave/game_backup.sii";
+        let data = std::fs::read(path).unwrap();
+        let text = crate::sii::decode_sii_file(&data).unwrap();
+        for line in text.lines() {
+            let lt = line.trim();
+            if lt.starts_with("experience_points:") && !lt.contains("bus_") {
+                eprintln!("FOUND: {}", lt);
+                break;
+            }
+        }
+    }
+
+    #[test]
     fn test_empty_on_parse_failure() {
         let f = extract_all_profile_fields("not a valid sii file");
         assert!(f.company_name.is_none());

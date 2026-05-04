@@ -104,6 +104,17 @@ pub fn toggle_entry_enabled(
 }
 
 #[tauri::command]
+pub fn toggle_entry_locked(
+    app_handle: tauri::AppHandle,
+    base_path: String,
+    playset_id: String,
+    mod_id: String,
+    locked: bool,
+) -> Result<Playset, AppError> {
+    manager::toggle_entry_locked(&app_handle, &base_path, &playset_id, &mod_id, locked)
+}
+
+#[tauri::command]
 pub fn add_mod_to_playset(
     app_handle: tauri::AppHandle,
     base_path: String,

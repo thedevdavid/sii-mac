@@ -50,6 +50,12 @@ export const PlaysetEntrySchema = z.object({
   display_name: z.string(),
   enabled: z.boolean(),
   order: z.number().int().nonnegative(),
+  /**
+   * Pins the entry's absolute position during the auto-fix reorder. Older
+   * playset payloads predate this field — the default keeps them unlocked so
+   * Zod doesn't reject them.
+   */
+  locked: z.boolean().default(false),
 });
 export type PlaysetEntry = z.infer<typeof PlaysetEntrySchema>;
 

@@ -9,7 +9,6 @@ use std::path::Path;
 
 use crate::error::AppError;
 use crate::profile::metadata::find_profile_sii;
-use crate::profile::mod_scanner;
 use crate::profile::models::ModEntry;
 use crate::sii;
 use crate::sii::parser::parse_siin;
@@ -71,8 +70,6 @@ pub fn delete_local_mod(base_path: &str, mod_id: &str) -> Result<(), AppError> {
         } else {
             fs::remove_file(candidate)?;
         }
-        // Drop the cached scan so the next read picks up the deleted file.
-        mod_scanner::invalidate_installation_mods_cache(base_path);
         return Ok(());
     }
 

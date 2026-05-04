@@ -470,6 +470,21 @@ export async function toggleEntryEnabled(
   return validateWithSchema(PlaysetSchema, "toggle_entry_enabled", raw);
 }
 
+export async function toggleEntryLocked(
+  basePath: GameBasePath,
+  playsetId: PlaysetId,
+  modId: ModId,
+  locked: boolean,
+): Promise<Playset> {
+  const raw = await invoke("toggle_entry_locked", {
+    basePath,
+    playsetId,
+    modId,
+    locked,
+  });
+  return validateWithSchema(PlaysetSchema, "toggle_entry_locked", raw);
+}
+
 export async function addModToPlayset(
   basePath: GameBasePath,
   playsetId: PlaysetId,

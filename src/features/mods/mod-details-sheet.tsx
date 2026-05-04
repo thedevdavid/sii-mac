@@ -2,6 +2,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/cupertino/sheet";
@@ -74,7 +75,7 @@ export function ModDetailsSheet({
                 ) : (
                   <IconFolder className="size-4" />
                 )}
-                {mod.display_name}
+                {mod.workshop?.title ?? mod.display_name}
               </SheetTitle>
               <SheetDescription className="text-xs">
                 {mod.author && <span>by {mod.author}</span>}
@@ -86,95 +87,94 @@ export function ModDetailsSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <ScrollArea className="h-[calc(100vh-220px)]">
-              <div className="space-y-4 p-4 text-xs">
-                {mod.workshop?.preview_url && (
-                  <img
-                    src={mod.workshop.preview_url}
-                    alt={mod.display_name}
-                    className="aspect-video w-full rounded border border-border object-cover"
-                  />
-                )}
+            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 text-xs">
+              {mod.workshop?.preview_url && (
+                <img
+                  src={mod.workshop.preview_url}
+                  alt={mod.display_name}
+                  className="aspect-video w-full rounded border border-border object-cover"
+                />
+              )}
 
-                {mod.categories.length > 0 && (
-                  <div>
-                    <div className="mb-1 text-[10px] font-semibold uppercase text-muted-foreground">
-                      Categories
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {mod.categories.map((c) => (
-                        <Badge key={c} variant="secondary" className="text-[10px]">
-                          {c}
-                        </Badge>
-                      ))}
-                    </div>
+              {mod.categories.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase text-muted-foreground">
+                    Categories
                   </div>
-                )}
-
-                {mod.compatible_versions.length > 0 && (
-                  <div>
-                    <div className="mb-1 text-[10px] font-semibold uppercase text-muted-foreground">
-                      Compatible with
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {mod.compatible_versions.map((v) => (
-                        <Badge key={v} variant="outline" className="text-[10px]">
-                          {v}
-                        </Badge>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1">
+                    {mod.categories.map((c) => (
+                      <Badge key={c} variant="secondary" className="text-[10px]">
+                        {c}
+                      </Badge>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {mod.workshop && (
-                  <div className="space-y-2 rounded border border-border p-3">
-                    <div className="text-[10px] font-semibold uppercase text-muted-foreground">
-                      Workshop
+              {mod.compatible_versions.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-semibold uppercase text-muted-foreground">
+                    Compatible with
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {mod.compatible_versions.map((v) => (
+                      <Badge key={v} variant="outline" className="text-[10px]">
+                        {v}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {mod.workshop && (
+                <div className="flex min-h-0 flex-1 flex-col gap-2 rounded border border-border p-3">
+                  <div className="text-[10px] font-semibold uppercase text-muted-foreground">
+                    Workshop
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px]">
+                    <div className="flex items-center gap-1">
+                      <IconUsers className="size-3" />
+                      {formatSubscriberCount(mod.workshop.subscribers)}
                     </div>
-                    <div className="flex items-center gap-4 text-[11px]">
+                    {(mod.workshop.votes_up || mod.workshop.votes_down) && (
                       <div className="flex items-center gap-1">
-                        <IconUsers className="size-3" />
-                        {formatSubscriberCount(mod.workshop.subscribers)}
-                      </div>
-                      {(mod.workshop.votes_up || mod.workshop.votes_down) && (
-                        <div className="flex items-center gap-1">
-                          <IconThumbUp className="size-3" />
-                          {mod.workshop.votes_up ?? 0}
-                          <IconThumbDown className="ml-1 size-3" />
-                          {mod.workshop.votes_down ?? 0}
-                          {formatVoteRatio(
-                            mod.workshop.votes_up,
-                            mod.workshop.votes_down,
-                          ) && (
-                            <span className="ml-1 text-muted-foreground">
-                              (
-                              {formatVoteRatio(
-                                mod.workshop.votes_up,
-                                mod.workshop.votes_down,
-                              )}
-                              )
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {mod.workshop.description && (
-                      <div className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                        {mod.workshop.description.slice(0, 400)}
-                        {mod.workshop.description.length > 400 && "…"}
+                        <IconThumbUp className="size-3" />
+                        {mod.workshop.votes_up ?? 0}
+                        <IconThumbDown className="ml-1 size-3" />
+                        {mod.workshop.votes_down ?? 0}
+                        {formatVoteRatio(
+                          mod.workshop.votes_up,
+                          mod.workshop.votes_down,
+                        ) && (
+                          <span className="ml-1 text-muted-foreground">
+                            (
+                            {formatVoteRatio(
+                              mod.workshop.votes_up,
+                              mod.workshop.votes_down,
+                            )}
+                            )
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-
-                <div className="text-[10px] text-muted-foreground">
-                  <div>ID: <code>{mod.id}</code></div>
-                  {mod.size != null && <div>Size: {formatBytes(mod.size)}</div>}
+                  {mod.workshop.description && (
+                    <ScrollArea className="min-h-0 flex-1 pr-3">
+                      <div className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
+                        {mod.workshop.description}
+                      </div>
+                    </ScrollArea>
+                  )}
                 </div>
-              </div>
-            </ScrollArea>
+              )}
 
-            <div className="flex gap-2 border-t border-border p-3">
+              <div className="text-[10px] text-muted-foreground">
+                <div>ID: <code>{mod.id}</code></div>
+                {mod.size != null && <div>Size: {formatBytes(mod.size)}</div>}
+              </div>
+            </div>
+
+            <SheetFooter className="flex-row gap-2 border-t border-border p-3">
               {mod.workshop_id && (
                 <Button
                   variant="outline"
@@ -197,7 +197,7 @@ export function ModDetailsSheet({
                   Delete file
                 </Button>
               )}
-            </div>
+            </SheetFooter>
           </>
         )}
       </SheetContent>

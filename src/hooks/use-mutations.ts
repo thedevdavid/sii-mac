@@ -17,6 +17,13 @@ import {
   unlockAllGarages,
   updateGameConfig,
 } from "@/lib/tauri-commands";
+import {
+  ProfilePathSchema,
+  type GameBasePath,
+  type GameConfigKey,
+  type SavePath,
+} from "@/lib/core-types";
+import type { GarageChange } from "@/features/editor/types";
 
 // --- Generic invalidating mutation helper ---
 
@@ -29,6 +36,7 @@ interface InvalidatingMutationOptions<TData, TVars, TContext = unknown>
   successToast?: string | ((data: TData, vars: TVars) => string);
   errorPrefix?: string;
   onSuccess?: (data: TData, vars: TVars) => void;
+  onError?: (err: Error, vars: TVars, context: TContext | undefined) => void;
 }
 
 export function useInvalidatingMutation<TData = void, TVars = void, TContext = unknown>(
@@ -37,7 +45,7 @@ export function useInvalidatingMutation<TData = void, TVars = void, TContext = u
   const queryClient = useQueryClient();
   return useMutation<TData, Error, TVars, TContext>({
     ...opts,
-    onSuccess: (data, vars, ctx) => {
+    onSuccess: (data, vars) => {
       if (opts.invalidate) {
         for (const key of opts.invalidate) {
           queryClient.invalidateQueries({ queryKey: key });
@@ -52,37 +60,50 @@ export function useInvalidatingMutation<TData = void, TVars = void, TContext = u
       }
       opts.onSuccess?.(data, vars);
     },
-    onError: (err) => {
+    onError: (err, vars, context) => {
       toast.error(`${opts.errorPrefix ?? "Failed"}: ${formatError(err)}`);
+      opts.onError?.(err, vars, context);
     },
   });
 }
 
 // --- Save editor mutations ---
 
-export function useUpdatePlayerData(savePath: string) {
+export function useUpdatePlayerData(savePath: SavePath) {
   const queryClient = useQueryClient();
-  const profilePath = savePath.replace(/\/save\/[^/]+$/, "");
+  const profilePath = ProfilePathSchema.parse(
+    (savePath as string).replace(/\/save\/[^/]+$/, ""),
+  );
   return useMutation({
-    mutationFn: (changes: { money?: number; experience?: number }) =>
+    mutationFn: (changes: Parameters<typeof updatePlayerData>[1]) =>
       updatePlayerData(savePath, changes),
-    onSuccess: () => {
+    onSuccess: (_data, changes) => {
       toast.success("Player data saved");
       queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.profiles.detail(profilePath) });
+      queryClient.setQueryData(
+        queryKeys.profiles.detail(profilePath),
+        (prev: Record<string, unknown> | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...(changes.experience != null && { cached_experience: changes.experience }),
+            ...(changes.money != null && { money: changes.money }),
+          };
+        },
+      );
     },
     onError: (err) => toast.error(`Save failed: ${formatError(err)}`),
   });
 }
 
-export function useUpdateTruck(savePath: string) {
+export function useUpdateTruck(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       truckId,
       changes,
     }: {
-      truckId: string;
+      truckId: Parameters<typeof updateTruck>[1];
       changes: Parameters<typeof updateTruck>[2];
     }) => updateTruck(savePath, truckId, changes),
     onSuccess: () => {
@@ -92,7 +113,7 @@ export function useUpdateTruck(savePath: string) {
   });
 }
 
-export function useUpdateAllTrucks(savePath: string) {
+export function useUpdateAllTrucks(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (action: "RepairAll" | "RefuelAll") =>
@@ -109,14 +130,14 @@ export function useUpdateAllTrucks(savePath: string) {
   });
 }
 
-export function useUpdateTrailer(savePath: string) {
+export function useUpdateTrailer(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       trailerId,
       changes,
     }: {
-      trailerId: string;
+      trailerId: Parameters<typeof updateTrailer>[1];
       changes: Parameters<typeof updateTrailer>[2];
     }) => updateTrailer(savePath, trailerId, changes),
     onSuccess: () => {
@@ -126,7 +147,7 @@ export function useUpdateTrailer(savePath: string) {
   });
 }
 
-export function useRepairAllTrailers(savePath: string) {
+export function useRepairAllTrailers(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => repairAllTrailers(savePath),
@@ -138,15 +159,15 @@ export function useRepairAllTrailers(savePath: string) {
   });
 }
 
-export function useUpdateGarage(savePath: string) {
+export function useUpdateGarage(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       garageId,
       change,
     }: {
-      garageId: string;
-      change: { status: number };
+      garageId: Parameters<typeof updateGarage>[1];
+      change: GarageChange;
     }) => updateGarage(savePath, garageId, change),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
@@ -155,7 +176,7 @@ export function useUpdateGarage(savePath: string) {
   });
 }
 
-export function useUnlockAllGarages(savePath: string) {
+export function useUnlockAllGarages(savePath: SavePath) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => unlockAllGarages(savePath),
@@ -169,10 +190,10 @@ export function useUnlockAllGarages(savePath: string) {
 
 // --- Config mutation ---
 
-export function useUpdateGameConfig(gameBasePath: string) {
+export function useUpdateGameConfig(gameBasePath: GameBasePath) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ key, value }: { key: string; value: string }) =>
+    mutationFn: ({ key, value }: { key: GameConfigKey; value: string }) =>
       updateGameConfig(gameBasePath, key, value),
     onSuccess: () => {
       toast.success("Setting updated");

@@ -4,7 +4,9 @@
 //! Each value is a `StoreVersioned<InstallationPlaysets>` envelope so future
 //! schema migrations stay isolated per installation.
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,6 +18,13 @@ use crate::error::AppError;
 use super::models::{InstallationPlaysets, CURRENT_SCHEMA_VERSION};
 
 const STORE_FILE: &str = "playsets.json";
+
+/// In-memory cache of `InstallationPlaysets` keyed by installation hash. Avoids
+/// the disk read on every command. Populated lazily by `load_installation`,
+/// kept in sync by `save_installation`. Mutations always go through
+/// `save_installation` so cache and disk never diverge.
+static CACHE: LazyLock<Mutex<HashMap<String, InstallationPlaysets>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreVersioned<T> {
@@ -45,25 +54,39 @@ fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
-/// Load the installation's playsets from disk. Returns a fresh empty container
-/// when no entry exists.
+/// Load the installation's playsets, preferring the in-memory cache. Falls
+/// back to disk on the first access for an installation, then populates the
+/// cache. Returns a fresh empty container when no on-disk entry exists.
 pub fn load_installation(
     app_handle: &AppHandle,
     base_path: &str,
 ) -> Result<InstallationPlaysets, AppError> {
     let key = installation_key(base_path);
+
+    if let Ok(cache) = CACHE.lock() {
+        if let Some(cached) = cache.get(&key) {
+            return Ok(cached.clone());
+        }
+    }
+
     let store = app_handle.store(STORE_FILE)?;
-    match store.get(&key) {
+    let loaded = match store.get(&key) {
         Some(raw) => {
             let envelope: StoreVersioned<InstallationPlaysets> = serde_json::from_value(raw)
                 .map_err(|e| AppError::Store(format!("parse playsets envelope: {e}")))?;
-            migrate(envelope)
+            migrate(envelope)?
         }
-        None => Ok(InstallationPlaysets::new(base_path.to_string())),
+        None => InstallationPlaysets::new(base_path.to_string()),
+    };
+
+    if let Ok(mut cache) = CACHE.lock() {
+        cache.insert(key, loaded.clone());
     }
+
+    Ok(loaded)
 }
 
-/// Save the installation's playsets to disk.
+/// Save the installation's playsets to disk and update the in-memory cache.
 pub fn save_installation(
     app_handle: &AppHandle,
     data: &InstallationPlaysets,
@@ -80,6 +103,11 @@ pub fn save_installation(
             .map_err(|e| AppError::Store(format!("serialize playsets: {e}")))?,
     );
     store.save()?;
+
+    if let Ok(mut cache) = CACHE.lock() {
+        cache.insert(key, data.clone());
+    }
+
     Ok(())
 }
 

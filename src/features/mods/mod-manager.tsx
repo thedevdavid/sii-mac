@@ -14,15 +14,26 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { GameBasePath, ProfilePath } from "@/lib/core-types";
+import type {
+  GameBasePath,
+  ModId,
+  PlaysetId,
+  ProfilePath,
+} from "@/lib/core-types";
+import type { FullModInfo } from "./types";
 import { PlaysetSidebar } from "./playset-sidebar";
 import { ModLibrary } from "./mod-library";
 import { PlaysetEditor } from "./playset-editor";
 import { ModDetailsSheet } from "./mod-details-sheet";
-import { useActivePlayset, useInstallationMods } from "./use-playsets";
+import {
+  useActivePlayset,
+  useInstallationMods,
+  usePlaysetDrift,
+  useWorkshopMetadata,
+} from "./use-playsets";
 import { useReorderPlaysetEntries } from "./use-playset-mutations";
 import { parseDndId } from "./dnd-ids";
-import type { EnrichedMod } from "./workshop-metadata";
+import { extractWorkshopIds, type EnrichedMod } from "./workshop-metadata";
 
 interface ModManagerProps {
   basePath: GameBasePath;
@@ -30,11 +41,28 @@ interface ModManagerProps {
 }
 
 export function ModManager({ basePath, profilePath }: ModManagerProps) {
+  // Single fetch site for the data shared across all three panels. Children
+  // receive these via props instead of re-subscribing — eliminates duplicate
+  // useQuery hooks, duplicate `extractWorkshopIds` passes, and duplicate
+  // `Map<ModId, FullModInfo>` builds.
   const { data: activePlayset, isLoading: playsetLoading } = useActivePlayset(
     basePath,
     profilePath,
   );
-  const { isLoading: modsLoading } = useInstallationMods(basePath);
+  const { data: installationMods, isLoading: modsLoading } =
+    useInstallationMods(basePath);
+  const workshopIds = extractWorkshopIds(installationMods ?? []);
+  const { data: workshopMap } = useWorkshopMetadata(basePath, workshopIds);
+  const { data: drift } = usePlaysetDrift(
+    basePath,
+    profilePath,
+    activePlayset?.id as PlaysetId | undefined,
+  );
+
+  const modsById = new Map<ModId, FullModInfo>(
+    (installationMods ?? []).map((m) => [m.id, m]),
+  );
+
   const reorderMutation = useReorderPlaysetEntries(basePath, profilePath);
 
   const [detailsTarget, setDetailsTarget] = useState<EnrichedMod | null>(null);
@@ -57,6 +85,17 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
     if (activeId.source !== "playset" || overId.source !== "playset") return;
     if (activeId.modId === overId.modId) return;
 
+    // Refuse moves that involve a locked endpoint — locked entries pin
+    // their absolute index and dragging through them would silently shift
+    // the lock target.
+    const fromEntry = activePlayset.entries.find(
+      (e) => e.mod_id === activeId.modId,
+    );
+    const toEntry = activePlayset.entries.find(
+      (e) => e.mod_id === overId.modId,
+    );
+    if (fromEntry?.locked || toEntry?.locked) return;
+
     const current = activePlayset.entries.map((e) => e.mod_id);
     const fromIdx = current.indexOf(activeId.modId);
     const toIdx = current.indexOf(overId.modId);
@@ -72,7 +111,7 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
     });
   };
 
-  if (playsetLoading || modsLoading) {
+  if (playsetLoading) {
     return <ModManagerSkeleton />;
   }
 
@@ -80,7 +119,12 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <ResizablePanelGroup orientation="horizontal" className="h-full">
         <ResizablePanel defaultSize="20" minSize="15" maxSize="30">
-          <PlaysetSidebar basePath={basePath} profilePath={profilePath} />
+          <PlaysetSidebar
+            basePath={basePath}
+            profilePath={profilePath}
+            activePlayset={activePlayset}
+            drift={drift}
+          />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize="50" minSize="30">
@@ -89,6 +133,9 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
             activePlayset={activePlayset}
             profilePath={profilePath}
             onShowDetails={setDetailsTarget}
+            installationMods={installationMods}
+            workshopMap={workshopMap}
+            isLoadingMods={modsLoading}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -97,6 +144,9 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
             basePath={basePath}
             profilePath={profilePath}
             playset={activePlayset}
+            modsById={modsById}
+            workshopMap={workshopMap}
+            drift={drift}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

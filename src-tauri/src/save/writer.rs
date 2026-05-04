@@ -118,53 +118,7 @@ pub fn update_player(save_path: &str, changes: &PlayerChanges) -> Result<(), App
         }
 
         Ok(())
-    })?;
-
-    if changes.experience.is_some() || changes.money.is_some() {
-        let _ = sync_profile_sii(save_path, changes);
-    }
-
-    Ok(())
-}
-
-/// Best-effort sync of edited values back to profile.sii so the profile
-/// overview stays current without requiring a game reload.
-fn sync_profile_sii(save_path: &str, changes: &PlayerChanges) -> Result<(), AppError> {
-    let profile_sii = Path::new(save_path)
-        .parent() // save/1
-        .and_then(|p| p.parent()) // save
-        .and_then(|p| p.parent()) // profile dir
-        .map(|p| p.join("profile.sii"));
-
-    let Some(profile_sii) = profile_sii.filter(|p| p.exists()) else {
-        return Ok(());
-    };
-
-    let data = std::fs::read(&profile_sii)?;
-    let text = crate::sii::decode_sii_file(&data)?;
-    let mut doc = parse_siin(&text).map_err(AppError::SiiDecode)?;
-
-    let Some(obj) = doc.objects.first_mut() else {
-        return Ok(());
-    };
-
-    if let Some(xp) = changes.experience {
-        if obj.get("cached_experience").is_some() {
-            obj.set("cached_experience", SiiValue::Integer(xp));
-        }
-        if obj.get("experience_points").is_some() {
-            obj.set("experience_points", SiiValue::Integer(xp));
-        }
-    }
-    if let Some(money) = changes.money {
-        if obj.get("money_account").is_some() {
-            obj.set("money_account", SiiValue::Integer(money));
-        }
-    }
-
-    let new_text = serialize_siin(&doc);
-    std::fs::write(&profile_sii, new_text.as_bytes())?;
-    Ok(())
+    })
 }
 
 pub fn update_truck(

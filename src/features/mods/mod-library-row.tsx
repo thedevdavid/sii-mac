@@ -22,6 +22,7 @@ export function ModLibraryRow({
   onViewDetails,
 }: ModLibraryRowProps) {
   const thumbnail = mod.workshop?.preview_url;
+  const displayTitle = mod.workshop?.title ?? mod.display_name;
 
   return (
     <div
@@ -45,8 +46,8 @@ export function ModLibraryRow({
         onClick={(e) => e.stopPropagation()}
         aria-label={
           isInPlayset
-            ? `Remove ${mod.display_name} from playset`
-            : `Add ${mod.display_name} to playset`
+            ? `Remove ${displayTitle} from playset`
+            : `Add ${displayTitle} to playset`
         }
       />
 
@@ -69,7 +70,7 @@ export function ModLibraryRow({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{mod.display_name}</div>
+        <div className="truncate font-medium">{displayTitle}</div>
         <div className="flex gap-2 truncate text-[10px] text-muted-foreground">
           {mod.author && <span>{mod.author}</span>}
           {mod.version && <span>v{mod.version}</span>}

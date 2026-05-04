@@ -3,26 +3,26 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Input } from "@/components/cupertino/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter";
-import type { GameBasePath } from "@/lib/core-types";
-import type { Playset } from "./types";
+import type { GameBasePath, ProfilePath } from "@/lib/core-types";
+import type { FullModInfo, Playset, WorkshopMetadataMap } from "./types";
 import { ModLibraryRow } from "./mod-library-row";
-import { useInstallationMods, useWorkshopMetadata } from "./use-playsets";
 import {
   useAddModToPlayset,
   useRemoveModFromPlayset,
 } from "./use-playset-mutations";
 import {
-  extractWorkshopIds,
   mergeWorkshopMetadata,
   type EnrichedMod,
 } from "./workshop-metadata";
-import type { FullModInfo } from "./types";
 
 interface ModLibraryProps {
   basePath: GameBasePath;
   activePlayset: Playset | undefined;
   onShowDetails: (mod: EnrichedMod) => void;
-  profilePath: string;
+  profilePath: ProfilePath;
+  installationMods: FullModInfo[] | undefined;
+  workshopMap: WorkshopMetadataMap | undefined;
+  isLoadingMods: boolean;
 }
 
 /** Estimated row height in px — used by the virtualizer to size the scroller. */
@@ -32,13 +32,16 @@ export function ModLibrary({
   basePath,
   activePlayset,
   onShowDetails,
+  profilePath,
+  installationMods,
+  workshopMap,
+  isLoadingMods,
 }: ModLibraryProps) {
-  const { data: mods, isLoading } = useInstallationMods(basePath);
-  const workshopIds = extractWorkshopIds(mods ?? []);
-  const { data: workshopMap } = useWorkshopMetadata(basePath, workshopIds);
+  const mods = installationMods;
+  const isLoading = isLoadingMods;
 
-  const addMutation = useAddModToPlayset(basePath, undefined);
-  const removeMutation = useRemoveModFromPlayset(basePath, undefined);
+  const addMutation = useAddModToPlayset(basePath, profilePath);
+  const removeMutation = useRemoveModFromPlayset(basePath, profilePath);
 
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
@@ -51,8 +54,12 @@ export function ModLibrary({
     activePlayset?.entries.map((e) => e.mod_id) ?? [],
   );
 
-  const allMods: EnrichedMod[] = (mods ?? []).map((m) =>
-    mergeWorkshopMetadata(m, workshopMap),
+  // Single pass over `mods` to build enriched list, category counts, and
+  // source counts. Replaces three separate iterations + N inner `.filter()`
+  // calls to count categories.
+  const { allMods, categoryCounts, workshopCount, localCount } = aggregateMods(
+    mods,
+    workshopMap,
   );
 
   const filtered = filterMods(allMods, {
@@ -71,40 +78,32 @@ export function ModLibrary({
     getItemKey: (index) => filtered[index]?.id ?? index,
   });
 
-  const allCategories = [
-    ...new Set((mods ?? []).flatMap((m) => m.categories)),
-  ].sort();
-  const categoryOptions = allCategories.map((c) => ({
-    label: c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, " "),
-    value: c,
-    count: (mods ?? []).filter((m) => m.categories.includes(c)).length,
-  }));
+  const categoryOptions = [...categoryCounts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([value, count]) => ({
+      label: value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " "),
+      value,
+      count,
+    }));
   const sourceOptions = [
-    {
-      label: "Workshop",
-      value: "workshop",
-      count: (mods ?? []).filter((m) => m.source === "workshop").length,
-    },
-    {
-      label: "Local",
-      value: "local",
-      count: (mods ?? []).filter((m) => m.source === "local").length,
-    },
+    { label: "Workshop", value: "workshop", count: workshopCount },
+    { label: "Local", value: "local", count: localCount },
   ].filter((o) => o.count > 0);
 
-  const handleToggleInPlayset = (mod: FullModInfo) => {
+  const handleToggleInPlayset = (mod: EnrichedMod) => {
     if (!activePlayset) return;
+    const displayName = mod.workshop?.title ?? mod.display_name;
     if (playsetModIds.has(mod.id)) {
       removeMutation.mutate({
         playsetId: activePlayset.id,
         modId: mod.id,
-        displayName: mod.display_name,
+        displayName,
       });
     } else {
       addMutation.mutate({
         playsetId: activePlayset.id,
         modId: mod.id,
-        displayName: mod.display_name,
+        displayName,
       });
     }
   };
@@ -201,6 +200,37 @@ export function ModLibrary({
 
     </div>
   );
+}
+
+/**
+ * Single-pass aggregation: enrich each mod with workshop metadata while
+ * counting categories and sources. One iteration replaces an `.map()` and
+ * three `.filter().length` passes plus a `.flatMap()` + Set + sort.
+ */
+function aggregateMods(
+  mods: FullModInfo[] | undefined,
+  workshopMap: WorkshopMetadataMap | undefined,
+): {
+  allMods: EnrichedMod[];
+  categoryCounts: Map<string, number>;
+  workshopCount: number;
+  localCount: number;
+} {
+  const allMods: EnrichedMod[] = [];
+  const categoryCounts = new Map<string, number>();
+  let workshopCount = 0;
+  let localCount = 0;
+
+  for (const mod of mods ?? []) {
+    allMods.push(mergeWorkshopMetadata(mod, workshopMap));
+    if (mod.source === "workshop") workshopCount++;
+    else if (mod.source === "local") localCount++;
+    for (const cat of mod.categories) {
+      categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+    }
+  }
+
+  return { allMods, categoryCounts, workshopCount, localCount };
 }
 
 interface FilterOptions {

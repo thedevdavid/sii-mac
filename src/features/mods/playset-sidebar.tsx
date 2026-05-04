@@ -4,18 +4,14 @@ import { Button } from "@/components/cupertino/button";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { IconPlus, IconUpload } from "@tabler/icons-react";
 import { formatError } from "@/lib/format-error";
-import type { GameBasePath, PlaysetId, ProfilePath } from "@/lib/core-types";
-import type { Playset } from "./types";
+import type { GameBasePath, ProfilePath } from "@/lib/core-types";
+import type { DriftReport, Playset } from "./types";
 import { PlaysetSidebarItem } from "./playset-sidebar-item";
 import { CreatePlaysetDialog } from "./create-playset-dialog";
 import { RenamePlaysetDialog } from "./rename-playset-dialog";
 import { DuplicatePlaysetDialog } from "./duplicate-playset-dialog";
 import { DeletePlaysetDialog } from "./delete-playset-dialog";
-import {
-  usePlaysets,
-  useActivePlayset,
-  usePlaysetDrift,
-} from "./use-playsets";
+import { usePlaysets } from "./use-playsets";
 import {
   useSetActivePlayset,
   useImportPlayset,
@@ -28,16 +24,17 @@ import {
 interface PlaysetSidebarProps {
   basePath: GameBasePath;
   profilePath: ProfilePath;
+  activePlayset: Playset | undefined;
+  drift: DriftReport | undefined;
 }
 
-export function PlaysetSidebar({ basePath, profilePath }: PlaysetSidebarProps) {
+export function PlaysetSidebar({
+  basePath,
+  profilePath,
+  activePlayset,
+  drift,
+}: PlaysetSidebarProps) {
   const { data: playsets } = usePlaysets(basePath);
-  const { data: activePlayset } = useActivePlayset(basePath, profilePath);
-  const { data: drift } = usePlaysetDrift(
-    basePath,
-    profilePath,
-    activePlayset?.id as PlaysetId | undefined,
-  );
 
   const setActive = useSetActivePlayset(basePath, profilePath);
   const importMutation = useImportPlayset(basePath);

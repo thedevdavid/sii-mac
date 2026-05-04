@@ -11,13 +11,14 @@ import {
 } from "@/components/ui/empty";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { isGarageOwned } from "@/features/editor/types";
+import type { SavePath } from "@/lib/core-types";
 import { PlayerEditor } from "./player-editor";
 import { TrucksTable } from "./trucks-table";
 import { TrailersTable } from "./trailers-table";
 import { WorldEditor } from "./world-editor";
 
 interface SaveEditorProps {
-  savePath: string;
+  savePath: SavePath;
   saveName: string;
   game: "ats" | "ets2";
 }

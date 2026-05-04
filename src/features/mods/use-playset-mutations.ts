@@ -23,6 +23,7 @@ import {
   setActivePlayset,
   setPlaysetEntries,
   toggleEntryEnabled,
+  toggleEntryLocked,
   updatePlaysetMetadata,
 } from "@/lib/tauri-commands";
 import type {
@@ -235,6 +236,7 @@ export function useImportPlayset(basePath: GameBasePath | null | undefined) {
 
 interface ActiveSnapshot {
   previous: Playset | undefined;
+  previousList: Playset[] | undefined;
 }
 
 type OptimisticUpdater = (current: Playset) => Playset;
@@ -244,7 +246,7 @@ function useOptimisticActiveMutation<TVars>(config: {
   profilePath: ProfilePath | null | undefined;
   mutationFn: (vars: TVars) => Promise<Playset>;
   apply: (vars: TVars) => OptimisticUpdater;
-  successToast?: (data: Playset, vars: TVars) => string | null;
+  successToast?: (data: Playset, vars: TVars) => string;
   errorPrefix?: string;
 }) {
   const queryClient = useQueryClient();
@@ -259,16 +261,31 @@ function useOptimisticActiveMutation<TVars>(config: {
     errorPrefix: config.errorPrefix,
     onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: activeKey });
+      await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<Playset>(activeKey);
+      const previousList = queryClient.getQueryData<Playset[]>(listKey);
       if (previous) {
         const next = config.apply(vars)(previous);
         queryClient.setQueryData(activeKey, next);
+        if (previousList) {
+          queryClient.setQueryData(
+            listKey,
+            previousList.map((p) => (p.id === next.id ? next : p)),
+          );
+        }
       }
-      return { previous };
+      return { previous, previousList };
     },
-    onError: (_err, _vars, context) => {
+    onError: (
+      _err: Error,
+      _vars: TVars,
+      context: ActiveSnapshot | undefined,
+    ) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(activeKey, context.previous);
+      }
+      if (context?.previousList !== undefined) {
+        queryClient.setQueryData(listKey, context.previousList);
       }
     },
   });
@@ -290,6 +307,25 @@ export function useToggleEntryEnabled(
       ),
     }),
     errorPrefix: "Toggle failed",
+  });
+}
+
+export function useToggleEntryLocked(
+  basePath: GameBasePath | null | undefined,
+  profilePath: ProfilePath | null | undefined,
+) {
+  return useOptimisticActiveMutation<{ modId: ModId; locked: boolean; playsetId: PlaysetId }>({
+    basePath,
+    profilePath,
+    mutationFn: ({ playsetId, modId, locked }) =>
+      toggleEntryLocked(basePath as GameBasePath, playsetId, modId, locked),
+    apply: ({ modId, locked }) => (current) => ({
+      ...current,
+      entries: current.entries.map((entry) =>
+        entry.mod_id === modId ? { ...entry, locked } : entry,
+      ),
+    }),
+    errorPrefix: "Lock toggle failed",
   });
 }
 
@@ -315,6 +351,7 @@ export function useAddModToPlayset(
           display_name: displayName,
           enabled: true,
           order: current.entries.length,
+          locked: false,
         },
       ],
     }),

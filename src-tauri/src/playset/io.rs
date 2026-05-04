@@ -99,6 +99,7 @@ mod tests {
                     display_name: "Mod X".into(),
                     enabled: true,
                     order: 0,
+                    ..Default::default()
                 }],
             },
         }

@@ -7,6 +7,8 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconGripVertical,
+  IconLock,
+  IconLockOpen,
   IconX,
 } from "@tabler/icons-react";
 import { playsetDndId } from "./dnd-ids";
@@ -14,10 +16,12 @@ import type { PlaysetEntry } from "./types";
 
 interface PlaysetEntryRowProps {
   entry: PlaysetEntry;
+  displayName?: string;
   index: number;
   total: number;
   isMissing: boolean;
   onToggleEnabled: (enabled: boolean) => void;
+  onToggleLocked: (locked: boolean) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -25,14 +29,17 @@ interface PlaysetEntryRowProps {
 
 export function PlaysetEntryRow({
   entry,
+  displayName,
   index,
   total,
   isMissing,
   onToggleEnabled,
+  onToggleLocked,
   onRemove,
   onMoveUp,
   onMoveDown,
 }: PlaysetEntryRowProps) {
+  const title = displayName ?? entry.display_name;
   const {
     attributes,
     listeners,
@@ -51,19 +58,30 @@ export function PlaysetEntryRow({
     <div
       ref={setNodeRef}
       style={style}
+      data-locked={entry.locked || undefined}
       className={cn(
         "flex items-center gap-2 rounded-md border border-transparent bg-background p-2 text-xs",
         !entry.enabled && "opacity-50",
         isMissing && "border-destructive/40 bg-destructive/5",
+        entry.locked && "border-amber-500/40 bg-amber-500/5",
         isDragging && "z-10 border-primary shadow-md",
       )}
     >
       <button
         type="button"
-        className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
-        aria-label={`Drag to reorder ${entry.display_name}`}
-        {...attributes}
-        {...listeners}
+        className={cn(
+          "touch-none text-muted-foreground",
+          entry.locked
+            ? "cursor-not-allowed opacity-40"
+            : "cursor-grab active:cursor-grabbing",
+        )}
+        aria-label={
+          entry.locked
+            ? `${title} is locked — unlock to drag`
+            : `Drag to reorder ${title}`
+        }
+        {...(entry.locked ? {} : attributes)}
+        {...(entry.locked ? {} : listeners)}
       >
         <IconGripVertical className="size-3.5" />
       </button>
@@ -75,11 +93,13 @@ export function PlaysetEntryRow({
       <Switch
         checked={entry.enabled}
         onCheckedChange={onToggleEnabled}
-        aria-label={`Toggle ${entry.display_name}`}
+        aria-label={`Toggle ${title}`}
       />
 
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{entry.display_name}</div>
+        <div className="truncate font-medium" title={title}>
+          {title}
+        </div>
         {isMissing && (
           <div className="text-[10px] text-destructive">Missing on disk</div>
         )}
@@ -89,8 +109,22 @@ export function PlaysetEntryRow({
         <Button
           variant="ghost"
           size="icon-sm"
+          onClick={() => onToggleLocked(!entry.locked)}
+          aria-label={entry.locked ? `Unlock ${title}` : `Lock ${title} in place`}
+          title={entry.locked ? "Unlock — allow auto-fix to move" : "Lock — pin to this position"}
+          className={entry.locked ? "text-amber-600" : undefined}
+        >
+          {entry.locked ? (
+            <IconLock className="size-3.5" />
+          ) : (
+            <IconLockOpen className="size-3.5" />
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={onMoveUp}
-          disabled={index === 0}
+          disabled={index === 0 || entry.locked}
           aria-label="Move up"
         >
           <IconChevronUp className="size-3.5" />
@@ -99,7 +133,7 @@ export function PlaysetEntryRow({
           variant="ghost"
           size="icon-sm"
           onClick={onMoveDown}
-          disabled={index === total - 1}
+          disabled={index === total - 1 || entry.locked}
           aria-label="Move down"
         >
           <IconChevronDown className="size-3.5" />

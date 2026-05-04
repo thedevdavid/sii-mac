@@ -3,6 +3,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { toast } from "sonner";
 import { Button } from "@/components/cupertino/button";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import {
@@ -15,24 +16,32 @@ import {
 } from "@/components/cupertino/dialog";
 import { Input } from "@/components/cupertino/input";
 import { Label } from "@/components/ui/label";
-import { IconDeviceFloppy, IconPlayerPlay } from "@tabler/icons-react";
+import {
+  IconDeviceFloppy,
+  IconPlayerPlay,
+  IconWand,
+} from "@tabler/icons-react";
 import type {
   GameBasePath,
   ModId,
-  PlaysetId,
   ProfilePath,
 } from "@/lib/core-types";
-import type { Playset } from "./types";
+import type { FullModInfo, Playset, WorkshopMetadataMap } from "./types";
+import type { DriftReport } from "./types";
 import { PlaysetEntryRow } from "./playset-entry-row";
 import { DriftBanner } from "./drift-banner";
 import { ApplyPlaysetConfirmation } from "./apply-playset-confirmation";
+import { AutoFixPreviewDialog } from "./auto-fix-preview-dialog";
+import { LoadOrderPopover } from "./load-order-popover";
 import { playsetDndId } from "./dnd-ids";
-import { usePlaysetDrift, useInstallationMods } from "./use-playsets";
+import { analyzeAndReorder, reorderIsNoOp } from "./load-order";
+import { useAutoFixMode } from "@/hooks/use-autofix-mode";
 import {
   useApplyPlayset,
   useReorderPlaysetEntries,
   useRemoveModFromPlayset,
   useToggleEntryEnabled,
+  useToggleEntryLocked,
   useSaveActiveAsPlayset,
   useAcceptPlaysetDrift,
 } from "./use-playset-mutations";
@@ -41,29 +50,32 @@ interface PlaysetEditorProps {
   basePath: GameBasePath;
   profilePath: ProfilePath;
   playset: Playset | undefined;
+  modsById: ReadonlyMap<ModId, FullModInfo>;
+  workshopMap: WorkshopMetadataMap | undefined;
+  drift: DriftReport | undefined;
 }
 
 export function PlaysetEditor({
   basePath,
   profilePath,
   playset,
+  modsById,
+  workshopMap,
+  drift,
 }: PlaysetEditorProps) {
-  const { data: drift } = usePlaysetDrift(
-    basePath,
-    profilePath,
-    playset?.id as PlaysetId | undefined,
-  );
-  const { data: installationMods } = useInstallationMods(basePath);
-
   const applyMutation = useApplyPlayset(basePath, profilePath);
   const reorderMutation = useReorderPlaysetEntries(basePath, profilePath);
   const removeMutation = useRemoveModFromPlayset(basePath, profilePath);
   const toggleMutation = useToggleEntryEnabled(basePath, profilePath);
+  const lockMutation = useToggleEntryLocked(basePath, profilePath);
   const saveAsMutation = useSaveActiveAsPlayset(basePath, profilePath);
   const acceptDriftMutation = useAcceptPlaysetDrift(basePath, profilePath);
 
+  const [autoFixMode] = useAutoFixMode();
+
   const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [autoFixPreviewOpen, setAutoFixPreviewOpen] = useState(false);
 
   if (!playset) {
     return (
@@ -73,8 +85,16 @@ export function PlaysetEditor({
     );
   }
 
-  const installedIds = new Set((installationMods ?? []).map((m) => m.id));
+  const resolveDisplayName = (modId: ModId, fallback: string): string => {
+    const mod = modsById.get(modId);
+    if (mod?.workshop_id && workshopMap?.[mod.workshop_id]?.title) {
+      return workshopMap[mod.workshop_id].title;
+    }
+    return fallback;
+  };
   const enabledCount = playset.entries.filter((e) => e.enabled).length;
+  const allLocked =
+    playset.entries.length > 0 && playset.entries.every((e) => e.locked);
 
   const moveEntry = (index: number, delta: number) => {
     const target = index + delta;
@@ -86,6 +106,41 @@ export function PlaysetEditor({
       playsetId: playset.id,
       orderedModIds: newOrder.map((e) => e.mod_id),
     });
+  };
+
+  const runAutoFix = (orderedIds: ModId[]) => {
+    reorderMutation.mutate({
+      playsetId: playset.id,
+      orderedModIds: orderedIds,
+    });
+    const movedCount = orderedIds.reduce((acc, modId, newIdx) => {
+      return playset.entries[newIdx]?.mod_id === modId ? acc : acc + 1;
+    }, 0);
+    const lockedCount = playset.entries.filter((e) => e.locked).length;
+    toast.success(
+      lockedCount > 0
+        ? `Reordered ${movedCount} mod${movedCount === 1 ? "" : "s"} (${lockedCount} locked unchanged)`
+        : `Reordered ${movedCount} mod${movedCount === 1 ? "" : "s"}`,
+    );
+  };
+
+  const handleAutoFix = () => {
+    if (autoFixMode === "immediate") {
+      const { plannedOrder } = analyzeAndReorder(
+        playset.entries,
+        modsById,
+        workshopMap,
+      );
+      if (reorderIsNoOp(playset.entries, plannedOrder)) {
+        toast.success("Already in recommended order");
+        return;
+      }
+      runAutoFix(plannedOrder);
+    } else {
+      // Preview mode: dialog computes its own plannedOrder live as the user
+      // edits the custom-hint textarea, so we just open it.
+      setAutoFixPreviewOpen(true);
+    }
   };
 
   return (
@@ -105,7 +160,26 @@ export function PlaysetEditor({
               {enabledCount} / {playset.entries.length} enabled
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
+            <LoadOrderPopover />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAutoFix}
+              disabled={
+                allLocked ||
+                reorderMutation.isPending ||
+                playset.entries.length === 0
+              }
+              title={
+                allLocked
+                  ? "All entries are locked"
+                  : "Auto-fix loading order"
+              }
+            >
+              <IconWand className="size-3.5" />
+              Auto-fix order
+            </Button>
             {playset.is_temporary && (
               <Button
                 size="sm"
@@ -159,9 +233,13 @@ export function PlaysetEditor({
                 <PlaysetEntryRow
                   key={entry.mod_id}
                   entry={entry}
+                  displayName={resolveDisplayName(
+                    entry.mod_id,
+                    entry.display_name,
+                  )}
                   index={index}
                   total={playset.entries.length}
-                  isMissing={!installedIds.has(entry.mod_id)}
+                  isMissing={!modsById.has(entry.mod_id)}
                   onToggleEnabled={(enabled) =>
                     toggleMutation.mutate({
                       playsetId: playset.id,
@@ -178,6 +256,13 @@ export function PlaysetEditor({
                   }
                   onMoveUp={() => moveEntry(index, -1)}
                   onMoveDown={() => moveEntry(index, 1)}
+                  onToggleLocked={(locked) =>
+                    lockMutation.mutate({
+                      playsetId: playset.id,
+                      modId: entry.mod_id as ModId,
+                      locked,
+                    })
+                  }
                 />
               ))}
             </SortableContext>
@@ -187,7 +272,7 @@ export function PlaysetEditor({
 
       <ApplyPlaysetConfirmation
         playset={playset}
-        installationMods={installationMods}
+        modsById={modsById}
         drift={drift}
         open={applyConfirmOpen}
         onOpenChange={setApplyConfirmOpen}
@@ -199,6 +284,19 @@ export function PlaysetEditor({
               onSettled: () => setApplyConfirmOpen(false),
             },
           );
+        }}
+      />
+
+      <AutoFixPreviewDialog
+        open={autoFixPreviewOpen}
+        onOpenChange={setAutoFixPreviewOpen}
+        entries={playset.entries}
+        modsById={modsById}
+        workshopMap={workshopMap}
+        isBusy={reorderMutation.isPending}
+        onApply={(plannedOrder) => {
+          runAutoFix(plannedOrder);
+          setAutoFixPreviewOpen(false);
         }}
       />
 
