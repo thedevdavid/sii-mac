@@ -49,6 +49,12 @@ pub enum AppError {
 
     #[error("Operation cancelled")]
     Cancelled,
+
+    #[error("Window error: {0}")]
+    Window(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 impl AppError {
@@ -70,6 +76,8 @@ impl AppError {
             Self::WorkshopApiError(_) => "workshopApiError",
             Self::Network(_) => "network",
             Self::Cancelled => "cancelled",
+            Self::Window(_) => "window",
+            Self::Internal(_) => "internal",
         }
     }
 }

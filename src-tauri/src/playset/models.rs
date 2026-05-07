@@ -65,6 +65,12 @@ pub struct ProfilePlaysetState {
     pub last_applied_at: Option<String>,
     #[serde(default)]
     pub last_applied_snapshot: Vec<PlaysetEntry>,
+    /// The id of the auto-managed "live" temporary playset for this profile.
+    /// Maintained by `manager::ensure_live_temp_playset` to mirror profile.sii
+    /// `active_mods` when no saved playset matches them. Absent when no temp
+    /// is needed (e.g. live mods already match a saved playset).
+    #[serde(default)]
+    pub temp_playset_id: Option<String>,
 }
 
 /// Everything persisted for one game installation. Top-level container in
@@ -208,8 +214,10 @@ mod tests {
     #[test]
     fn test_is_playset_active_for_any_profile() {
         let mut inst = InstallationPlaysets::new("/p".into());
-        let mut state = ProfilePlaysetState::default();
-        state.active_playset_id = Some("ps1".into());
+        let state = ProfilePlaysetState {
+            active_playset_id: Some("ps1".into()),
+            ..Default::default()
+        };
         inst.profile_states.insert("/profile".into(), state);
 
         assert!(inst.is_playset_active_for_any_profile("ps1"));

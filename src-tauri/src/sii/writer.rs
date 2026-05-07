@@ -107,33 +107,35 @@ mod tests {
         assert_eq!(doc2.objects[0].get_int("money_account"), Some(500000));
     }
 
+    fn doc_with_one(obj: SiiObject) -> SiiDocument {
+        let mut doc = SiiDocument::new();
+        doc.push_object(obj);
+        doc
+    }
+
     #[test]
     fn test_serialize_string() {
-        let doc = SiiDocument {
-            objects: vec![SiiObject {
-                class: "test".into(),
-                id: ".test".into(),
-                fields: vec![SiiField {
-                    name: "name".into(),
-                    value: SiiValue::String("Hello World".into()),
-                }],
+        let doc = doc_with_one(SiiObject {
+            class: "test".into(),
+            id: ".test".into(),
+            fields: vec![SiiField {
+                name: "name".into(),
+                value: SiiValue::String("Hello World".into()),
             }],
-        };
+        });
         let output = serialize_siin(&doc);
         assert!(output.contains("name: \"Hello World\""));
     }
 
     fn roundtrip_string(raw: &str) -> String {
-        let doc = SiiDocument {
-            objects: vec![SiiObject {
-                class: "test".into(),
-                id: ".test".into(),
-                fields: vec![SiiField {
-                    name: "name".into(),
-                    value: SiiValue::String(raw.into()),
-                }],
+        let doc = doc_with_one(SiiObject {
+            class: "test".into(),
+            id: ".test".into(),
+            fields: vec![SiiField {
+                name: "name".into(),
+                value: SiiValue::String(raw.into()),
             }],
-        };
+        });
         let output = serialize_siin(&doc);
         let reparsed = parse_siin(&output).expect("reparse must succeed");
         match reparsed.objects[0].get("name") {
@@ -175,16 +177,14 @@ mod tests {
 
     #[test]
     fn test_serialize_escaped_quote_has_backslash() {
-        let doc = SiiDocument {
-            objects: vec![SiiObject {
-                class: "t".into(),
-                id: ".t".into(),
-                fields: vec![SiiField {
-                    name: "plate".into(),
-                    value: SiiValue::String(r#"ABC"X"#.into()),
-                }],
+        let doc = doc_with_one(SiiObject {
+            class: "t".into(),
+            id: ".t".into(),
+            fields: vec![SiiField {
+                name: "plate".into(),
+                value: SiiValue::String(r#"ABC"X"#.into()),
             }],
-        };
+        });
         let out = serialize_siin(&doc);
         assert!(out.contains(r#"plate: "ABC\"X""#), "serialized: {out}");
     }

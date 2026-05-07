@@ -67,6 +67,7 @@ export function PlaysetSidebarItem({
       </div>
       <PlaysetActionsMenu
         playset={playset}
+        isActive={isActive}
         onRename={onRename}
         onDuplicate={onDuplicate}
         onExport={onExport}

@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import type { ModId } from "@/lib/core-types";
 import type { Playset, DriftReport, FullModInfo } from "./types";
+import { playsetActionHelp } from "./playset-actions-help";
 
 interface ApplyPlaysetConfirmationProps {
   playset: Playset | null;
@@ -55,8 +56,8 @@ export function ApplyPlaysetConfirmation({
         <AlertDialogHeader>
           <AlertDialogTitle>Apply "{playset.name}"?</AlertDialogTitle>
           <AlertDialogDescription>
-            Write {enabledEntries.length} enabled mod
-            {enabledEntries.length === 1 ? "" : "s"} to profile.sii.
+            {playsetActionHelp.apply} ({enabledEntries.length} enabled mod
+            {enabledEntries.length === 1 ? "" : "s"}.)
           </AlertDialogDescription>
         </AlertDialogHeader>
 

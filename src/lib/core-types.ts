@@ -199,6 +199,7 @@ export const AppErrorKindSchema = z.enum([
   "workshopApiError",
   "network",
   "cancelled",
+  "internal",
 ]);
 export type AppErrorKind = z.infer<typeof AppErrorKindSchema>;
 

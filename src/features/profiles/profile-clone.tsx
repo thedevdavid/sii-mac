@@ -1,20 +1,19 @@
 import { queryKeys } from "@/lib/query-keys";
-import { formatError, formatFieldErrors } from "@/lib/format-error";
+import { formatError } from "@/lib/format-error";
 import { useTransition } from "react";
-import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfileContents, useProfileDetail } from "@/hooks/use-profiles";
 // No Card imports — using section headers + bordered containers (macOS pattern)
 import { Button } from "@/components/cupertino/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Input } from "@/components/cupertino/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cloneProfile } from "@/lib/tauri-commands";
+import { useAppForm } from "@/lib/form";
 import type { GameInstallation } from "@/lib/core-types";
 import {
   CloneOptionsSchema,
@@ -23,8 +22,6 @@ import {
   type ProfileSummary,
 } from "@/features/profiles/types";
 import {
-  IconCopy,
-  IconLoader2,
   IconLock,
   IconSettings2,
   IconSchool,
@@ -86,7 +83,7 @@ function CloneForm({
   // Default to "Recommended" preset
   const recommendedDefaults = buildPresetValues("recommended", contents);
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
       newProfileName: `${profile.name} (Copy)`,
       preset: "recommended" as ClonePreset,
@@ -97,9 +94,7 @@ function CloneForm({
       filterMods: recommendedDefaults.filterMods ?? false,
       includeOnlineProfile: false,
     },
-    validators: {
-      onChange: CloneFormSchema,
-    },
+    validators: { onSubmit: CloneFormSchema },
     onSubmit: ({ value }) => {
       const shouldFilter =
         value.filterMods || value.selectedMods.length !== allModIds.length;
@@ -211,35 +206,24 @@ function CloneForm({
           }}
           className="space-y-5"
         >
-          {/* Profile name */}
-          <form.Field
-            name="newProfileName"
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="newProfileName">New Profile Name</Label>
-                <Input
-                  id="newProfileName"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  maxLength={64}
-                  disabled={isPending}
-                  autoFocus
-                  className="max-w-sm"
-                />
-                {field.state.meta.isTouched && !field.state.meta.isValid && (
-                  <p className="text-xs text-destructive">
-                    {formatFieldErrors(field.state.meta.errors)}
-                  </p>
-                )}
-              </div>
+          <form.AppField name="newProfileName">
+            {(field) => (
+              <field.TextField
+                id="newProfileName"
+                label="New Profile Name"
+                className="max-w-sm"
+                inputProps={{
+                  maxLength: 64,
+                  disabled: isPending,
+                  autoFocus: true,
+                }}
+              />
             )}
-          />
+          </form.AppField>
 
           {/* Presets */}
-          <form.Field
-            name="preset"
-            children={(field) => (
+          <form.AppField name="preset">
+            {(field) => (
               <div className="space-y-2">
                 <Label>Preset</Label>
                 <ButtonGroup>
@@ -263,7 +247,7 @@ function CloneForm({
                 </p>
               </div>
             )}
-          />
+          </form.AppField>
 
           {/* Component tree */}
           <form.Subscribe
@@ -614,14 +598,9 @@ function CloneForm({
                         </Badge>
                       )}
                     </div>
-                    <Button type="submit" disabled={isPending} size="lg">
-                      {isPending ? (
-                        <IconLoader2 className="mr-2 size-4 animate-spin" />
-                      ) : (
-                        <IconCopy className="mr-2 size-4" />
-                      )}
-                      Clone Profile
-                    </Button>
+                    <form.AppForm>
+                      <form.SubmitButton label="Clone Profile" size="lg" />
+                    </form.AppForm>
                   </div>
                 </>
               );

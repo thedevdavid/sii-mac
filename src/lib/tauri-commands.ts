@@ -22,16 +22,24 @@ import {
 import {
   BulkActionSchema,
   GarageChangeSchema,
+  GarageDataSchema,
   PlayerChangesSchema,
+  PlayerUpdateResultSchema,
   SaveDataSchema,
   TrailerChangesSchema,
+  TrailerDataSchema,
   TruckChangesSchema,
+  TruckDataSchema,
   type BulkAction,
   type GarageChange,
+  type GarageData,
   type PlayerChanges,
+  type PlayerUpdateResult,
   type SaveData,
   type TrailerChanges,
+  type TrailerData,
   type TruckChanges,
+  type TruckData,
 } from "@/features/editor/types";
 import {
   type CloneOptions,
@@ -49,12 +57,10 @@ import {
   FullModInfoSchema,
   PlaysetSchema,
   WorkshopMetadataSchema,
-  PlaysetEntrySchema,
   PlaysetMetadataPatchSchema,
   type DriftReport,
   type FullModInfo,
   type Playset,
-  type PlaysetEntry,
   type PlaysetMetadataPatch,
   type WorkshopMetadata,
 } from "@/features/mods/types";
@@ -215,32 +221,34 @@ export async function getSaveData(savePath: SavePath): Promise<SaveData> {
 export async function updatePlayerData(
   savePath: SavePath,
   changes: PlayerChanges,
-): Promise<void> {
+): Promise<PlayerUpdateResult> {
   const validated = validateWithSchema(
     PlayerChangesSchema,
     "update_player_data.changes",
     changes,
   );
-  await invoke("update_player_data", { savePath, changes: validated });
+  const raw = await invoke("update_player_data", { savePath, changes: validated });
+  return validateWithSchema(PlayerUpdateResultSchema, "update_player_data", raw);
 }
 
 export async function updateTruck(
   savePath: SavePath,
   truckId: TruckId,
   changes: TruckChanges,
-): Promise<void> {
+): Promise<TruckData> {
   const validated = validateWithSchema(
     TruckChangesSchema,
     "update_truck.changes",
     changes,
   );
-  await invoke("update_truck", { savePath, truckId, changes: validated });
+  const raw = await invoke("update_truck", { savePath, truckId, changes: validated });
+  return validateWithSchema(TruckDataSchema, "update_truck", raw);
 }
 
 export async function updateAllTrucks(
   savePath: SavePath,
   action: BulkAction,
-): Promise<number> {
+): Promise<TruckData[]> {
   const validatedAction = validateWithSchema(
     BulkActionSchema,
     "update_all_trucks.action",
@@ -250,43 +258,45 @@ export async function updateAllTrucks(
     savePath,
     action: validatedAction,
   });
-  return validateWithSchema(z.number(), "update_all_trucks", raw);
+  return validateWithSchema(z.array(TruckDataSchema), "update_all_trucks", raw);
 }
 
 export async function updateTrailer(
   savePath: SavePath,
   trailerId: TrailerId,
   changes: TrailerChanges,
-): Promise<void> {
+): Promise<TrailerData> {
   const validated = validateWithSchema(
     TrailerChangesSchema,
     "update_trailer.changes",
     changes,
   );
-  await invoke("update_trailer", { savePath, trailerId, changes: validated });
+  const raw = await invoke("update_trailer", { savePath, trailerId, changes: validated });
+  return validateWithSchema(TrailerDataSchema, "update_trailer", raw);
 }
 
-export async function repairAllTrailers(savePath: SavePath): Promise<number> {
+export async function repairAllTrailers(savePath: SavePath): Promise<TrailerData[]> {
   const raw = await invoke("repair_all_trailers", { savePath });
-  return validateWithSchema(z.number(), "repair_all_trailers", raw);
+  return validateWithSchema(z.array(TrailerDataSchema), "repair_all_trailers", raw);
 }
 
 export async function updateGarage(
   savePath: SavePath,
   garageId: GarageId,
   change: GarageChange,
-): Promise<void> {
+): Promise<GarageData> {
   const validated = validateWithSchema(
     GarageChangeSchema,
     "update_garage.change",
     change,
   );
-  await invoke("update_garage", { savePath, garageId, change: validated });
+  const raw = await invoke("update_garage", { savePath, garageId, change: validated });
+  return validateWithSchema(GarageDataSchema, "update_garage", raw);
 }
 
-export async function unlockAllGarages(savePath: SavePath): Promise<number> {
+export async function unlockAllGarages(savePath: SavePath): Promise<GarageData[]> {
   const raw = await invoke("unlock_all_garages", { savePath });
-  return validateWithSchema(z.number(), "unlock_all_garages", raw);
+  return validateWithSchema(z.array(GarageDataSchema), "unlock_all_garages", raw);
 }
 
 // --- Game config commands ---
@@ -348,6 +358,22 @@ export async function scanInstallationMods(
   return validateWithSchema(
     z.array(FullModInfoSchema),
     "scan_installation_mods",
+    raw,
+  );
+}
+
+/**
+ * Force a fresh disk scan, bypassing both the in-process and on-disk caches.
+ * Use after the user has added or removed mod files outside the app — the
+ * regular scan caches forever and won't pick those changes up otherwise.
+ */
+export async function refreshInstallationMods(
+  basePath: GameBasePath,
+): Promise<FullModInfo[]> {
+  const raw = await invoke("refresh_installation_mods", { basePath });
+  return validateWithSchema(
+    z.array(FullModInfoSchema),
+    "refresh_installation_mods",
     raw,
   );
 }
@@ -435,24 +461,6 @@ export async function updatePlaysetMetadata(
     patch: validated,
   });
   return validateWithSchema(PlaysetSchema, "update_playset_metadata", raw);
-}
-
-export async function setPlaysetEntries(
-  basePath: GameBasePath,
-  playsetId: PlaysetId,
-  entries: PlaysetEntry[],
-): Promise<Playset> {
-  const validated = validateWithSchema(
-    z.array(PlaysetEntrySchema),
-    "set_playset_entries.entries",
-    entries,
-  );
-  const raw = await invoke("set_playset_entries", {
-    basePath,
-    playsetId,
-    entries: validated,
-  });
-  return validateWithSchema(PlaysetSchema, "set_playset_entries", raw);
 }
 
 export async function toggleEntryEnabled(

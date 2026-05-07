@@ -1,6 +1,4 @@
-import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
-import { Button } from "@/components/cupertino/button";
 import { Input } from "@/components/cupertino/input";
 import {
   Item,
@@ -9,8 +7,8 @@ import {
   ItemTitle,
   ItemActions,
 } from "@/components/ui/item";
-import { IconLoader2 } from "@tabler/icons-react";
 import { useUpdatePlayerData } from "@/hooks/use-mutations";
+import { useAppForm } from "@/lib/form";
 import type { BankData, EconomyData, PlayerData } from "@/features/editor/types";
 import type { SavePath } from "@/lib/core-types";
 import { calculateLevel } from "@/lib/level-calc";
@@ -31,16 +29,17 @@ interface PlayerEditorProps {
 export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEditorProps) {
   const mutation = useUpdatePlayerData(savePath);
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
       money: bank.money_account,
       experience: economy.experience_points ?? 0,
     },
-    validators: {
-      onChange: PlayerFormSchema,
-    },
-    onSubmit: ({ value }) => {
-      mutation.mutate({ money: value.money, experience: value.experience });
+    validators: { onSubmit: PlayerFormSchema },
+    onSubmit: async ({ value }) => {
+      await mutation.mutateAsync({
+        money: value.money,
+        experience: value.experience,
+      });
     },
   });
 
@@ -54,9 +53,8 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
         className="space-y-4"
       >
         <ItemGroup>
-          <form.Field
-            name="money"
-            children={(field) => (
+          <form.AppField name="money">
+            {(field) => (
               <Item variant="outline">
                 <ItemContent>
                   <ItemTitle>Money</ItemTitle>
@@ -67,9 +65,7 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
                     <Input
                       type="number"
                       value={field.state.value}
-                      onChange={(e) =>
-                        field.handleChange(Number(e.target.value))
-                      }
+                      onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                       className="w-36 text-right"
                       min={0}
@@ -78,11 +74,10 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
                 </ItemActions>
               </Item>
             )}
-          />
+          </form.AppField>
 
-          <form.Field
-            name="experience"
-            children={(field) => {
+          <form.AppField name="experience">
+            {(field) => {
               const levelInfo = calculateLevel(field.state.value, game);
               return (
                 <Item variant="outline">
@@ -97,9 +92,7 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
                     <Input
                       type="number"
                       value={field.state.value}
-                      onChange={(e) =>
-                        field.handleChange(Number(e.target.value))
-                      }
+                      onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                       className="w-36 text-right"
                       min={0}
@@ -108,7 +101,7 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
                 </Item>
               );
             }}
-          />
+          </form.AppField>
 
           <Item variant="outline">
             <ItemContent>
@@ -158,10 +151,9 @@ export function PlayerEditor({ savePath, bank, player, economy, game }: PlayerEd
         </ItemGroup>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={mutation.isPending} size="sm">
-            {mutation.isPending && <IconLoader2 className="mr-2 size-3.5 animate-spin" />}
-            Save Changes
-          </Button>
+          <form.AppForm>
+            <form.SubmitButton label="Save Changes" />
+          </form.AppForm>
         </div>
       </form>
     </div>

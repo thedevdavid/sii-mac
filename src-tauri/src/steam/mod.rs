@@ -3,5 +3,3 @@
 pub mod paths;
 pub mod workshop_api;
 pub mod workshop_cache;
-
-pub use paths::*;

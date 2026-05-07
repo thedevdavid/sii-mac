@@ -18,12 +18,22 @@ export const queryKeys = {
     list: (basePath: string) => ["playsets", "list", basePath] as const,
     detail: (basePath: string, playsetId: string) =>
       ["playsets", "detail", basePath, playsetId] as const,
-    active: (profilePath: string) => ["playsets", "active", profilePath] as const,
-    drift: (profilePath: string, playsetId: string) =>
-      ["playsets", "drift", profilePath, playsetId] as const,
+    detailPrefix: (basePath: string) =>
+      ["playsets", "detail", basePath] as const,
+    active: (basePath: string, profilePath: string) =>
+      ["playsets", "active", basePath, profilePath] as const,
+    activePrefix: (basePath: string) =>
+      ["playsets", "active", basePath] as const,
+    drift: (basePath: string, profilePath: string, playsetId: string) =>
+      ["playsets", "drift", basePath, profilePath, playsetId] as const,
+    driftPrefix: (basePath: string, profilePath?: string) =>
+      profilePath !== undefined
+        ? (["playsets", "drift", basePath, profilePath] as const)
+        : (["playsets", "drift", basePath] as const),
   },
   workshop: {
-    metadata: (basePath: string) => ["workshop", "metadata", basePath] as const,
+    metadataFor: (basePath: string, ids: string[]) =>
+      ["workshop", "metadata", basePath, ids.slice().sort().join(",")] as const,
   },
   backups: {
     all: () => ["backups"] as const,

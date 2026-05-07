@@ -1,38 +1,24 @@
-import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useForm } from "@tanstack/react-form";
-import { z } from "zod";
+import { useNavigate } from "@tanstack/react-router";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/cupertino/button";
-import { Input } from "@/components/cupertino/input";
 import { Badge } from "@/components/ui/badge";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Progress } from "@/components/ui/progress";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-  SheetClose,
-} from "@/components/cupertino/sheet";
-import {
-  IconTool,
-  IconGasStation,
-  IconStar,
-  IconLoader2,
-} from "@tabler/icons-react";
-import { updateTruck, updateAllTrucks } from "@/lib/tauri-commands";
-import { queryKeys } from "@/lib/query-keys";
+import { IconTool, IconGasStation, IconStar } from "@tabler/icons-react";
+import { useUpdateTruck, useUpdateAllTrucks } from "@/hooks/use-mutations";
 import type { TruckData } from "@/features/editor/types";
 import type { SavePath, TruckId } from "@/lib/core-types";
 
-// --- Helpers ---
+// SCS stores wear values as integers in 0..=WEAR_MAX. The UI rounds to a
+// 0..100 percent for badge thresholds so we don't dilute the column with
+// six-digit raw counts.
+const WEAR_MAX = 1_000_000;
+
+function wearPercent(raw: number): number {
+  return Math.round((raw / WEAR_MAX) * 100);
+}
 
 function maxWear(truck: TruckData): number {
   return Math.max(
@@ -44,25 +30,25 @@ function maxWear(truck: TruckData): number {
 }
 
 function wearLabel(wear: number): string {
-  if (wear === 0) return "Perfect";
-  if (wear < 10) return "Good";
-  if (wear < 30) return "Worn";
+  const pct = wearPercent(wear);
+  if (pct === 0) return "Perfect";
+  if (pct < 10) return "Good";
+  if (pct < 30) return "Worn";
   return "Damaged";
 }
 
 function wearVariant(
   wear: number,
 ): "default" | "secondary" | "destructive" | "outline" {
-  if (wear === 0) return "secondary";
-  if (wear < 30) return "outline";
+  const pct = wearPercent(wear);
+  if (pct === 0) return "secondary";
+  if (pct < 30) return "outline";
   return "destructive";
 }
 
-// --- Column definitions ---
-
 const col = createColumnHelper<TruckData>();
 
-function createColumns(
+function buildColumns(
   playerTruckId: TruckId | null | undefined,
   onRepair: (truck: TruckData) => void,
   onRefuel: (truck: TruckData) => void,
@@ -131,12 +117,16 @@ function createColumns(
         const wear = maxWear(truck);
         const fuelPct = Math.round(truck.fuel_relative * 100);
         return (
-          <span className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <span
+            className="flex justify-end gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onRepair(truck)}
               disabled={isPending || wear === 0}
+              aria-label={`Repair ${truck.display_name ?? truck.id}`}
             >
               <IconTool className="size-3" />
             </Button>
@@ -145,6 +135,7 @@ function createColumns(
               size="sm"
               onClick={() => onRefuel(truck)}
               disabled={isPending || fuelPct >= 100}
+              aria-label={`Refuel ${truck.display_name ?? truck.id}`}
             >
               <IconGasStation className="size-3" />
             </Button>
@@ -156,299 +147,85 @@ function createColumns(
   ];
 }
 
-// --- Detail sheet form ---
-
-const TruckEditSchema = z.object({
-  fuel: z.number().min(0).max(100),
-  engine_wear: z.number().min(0).max(100),
-  transmission_wear: z.number().min(0).max(100),
-  cabin_wear: z.number().min(0).max(100),
-  chassis_wear: z.number().min(0).max(100),
-  license_plate: z.string(),
-});
-
-function TruckDetailSheet({
-  truck,
-  savePath,
-  onClose,
-  onSaved,
-}: {
-  truck: TruckData;
-  savePath: SavePath;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-
-  const form = useForm({
-    defaultValues: {
-      fuel: Math.round(truck.fuel_relative * 100),
-      engine_wear: truck.engine_wear,
-      transmission_wear: truck.transmission_wear,
-      cabin_wear: truck.cabin_wear,
-      chassis_wear: truck.chassis_wear,
-      license_plate: truck.license_plate ?? "",
-    },
-    validators: { onChange: TruckEditSchema },
-    onSubmit: ({ value }) => {
-      startTransition(async () => {
-        try {
-          await updateTruck(savePath, truck.id, {
-            fuel_relative: value.fuel / 100,
-            engine_wear: value.engine_wear,
-            transmission_wear: value.transmission_wear,
-            cabin_wear: value.cabin_wear,
-            chassis_wear: value.chassis_wear,
-            license_plate: value.license_plate,
-          });
-          toast.success("Truck updated");
-          onSaved();
-          onClose();
-        } catch (err) {
-          toast.error(`Failed: ${(err as Error).message ?? err}`);
-        }
-      });
-    },
-  });
-
-  function handleRepairAll() {
-    form.setFieldValue("engine_wear", 0);
-    form.setFieldValue("transmission_wear", 0);
-    form.setFieldValue("cabin_wear", 0);
-    form.setFieldValue("chassis_wear", 0);
-  }
-
-  function handleFillTank() {
-    form.setFieldValue("fuel", 100);
-  }
-
-  return (
-    <SheetContent className="sm:max-w-md">
-      <SheetHeader>
-        <SheetTitle>{truck.display_name ?? truck.id}</SheetTitle>
-        <SheetDescription>
-          {truck.odometer.toLocaleString()} km &middot;{" "}
-          {truck.accessory_count} accessories
-        </SheetDescription>
-      </SheetHeader>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          form.handleSubmit();
-        }}
-        className="space-y-5 p-4"
-      >
-        {/* Quick actions */}
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={handleRepairAll}>
-            <IconTool className="size-3.5" />
-            Repair All
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={handleFillTank}>
-            <IconGasStation className="size-3.5" />
-            Fill Tank
-          </Button>
-        </div>
-
-        {/* Fuel slider */}
-        <form.Field
-          name="fuel"
-          children={(field) => (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Fuel</Label>
-                <span className="text-xs text-muted-foreground">{field.state.value}%</span>
-              </div>
-              <Slider
-                value={[field.state.value]}
-                onValueChange={(v) =>
-                  field.handleChange(Array.isArray(v) ? v[0] : v)
-                }
-                max={100}
-                step={1}
-              />
-            </div>
-          )}
-        />
-
-        {/* Wear sliders */}
-        {(
-          [
-            ["engine_wear", "Engine"],
-            ["transmission_wear", "Transmission"],
-            ["cabin_wear", "Cabin"],
-            ["chassis_wear", "Chassis"],
-          ] as const
-        ).map(([name, label]) => (
-          <form.Field
-            key={name}
-            name={name}
-            children={(field) => (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>{label} Wear</Label>
-                  <span className="text-xs text-muted-foreground">{field.state.value}</span>
-                </div>
-                <Slider
-                  value={[field.state.value]}
-                  onValueChange={(v) =>
-                    field.handleChange(Array.isArray(v) ? v[0] : v)
-                  }
-                  max={100}
-                  step={1}
-                />
-              </div>
-            )}
-          />
-        ))}
-
-        {/* License plate */}
-        <form.Field
-          name="license_plate"
-          children={(field) => (
-            <div className="space-y-2">
-              <Label>License Plate</Label>
-              <Input
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                placeholder="e.g. ABC123|california"
-              />
-            </div>
-          )}
-        />
-
-        <SheetFooter>
-          <SheetClose render={<Button variant="outline" size="sm" />}>
-            Cancel
-          </SheetClose>
-          <Button type="submit" size="sm" disabled={isPending}>
-            {isPending && <IconLoader2 className="mr-1.5 size-3 animate-spin" />}
-            Save
-          </Button>
-        </SheetFooter>
-      </form>
-    </SheetContent>
-  );
-}
-
-// --- Main component ---
-
 interface TrucksTableProps {
   savePath: SavePath;
   trucks: TruckData[];
   playerTruckId: TruckId | null | undefined;
+  saveId: string;
 }
 
 export function TrucksTable({
   savePath,
   trucks,
   playerTruckId,
+  saveId,
 }: TrucksTableProps) {
-  const queryClient = useQueryClient();
-  const [isPending, startTransition] = useTransition();
-  const [selectedTruck, setSelectedTruck] = useState<TruckData | null>(null);
+  const navigate = useNavigate();
+  const updateOneMutation = useUpdateTruck(savePath);
+  const bulkMutation = useUpdateAllTrucks(savePath);
 
-  function invalidate() {
-    queryClient.invalidateQueries({ queryKey: queryKeys.saves.data(savePath) });
-  }
-
-  function handleRepairAll() {
-    startTransition(async () => {
-      try {
-        const count = await updateAllTrucks(savePath, "RepairAll");
-        toast.success(`Repaired ${count} trucks`);
-        invalidate();
-      } catch (err) {
-        toast.error(`Repair failed: ${(err as Error).message ?? err}`);
-      }
-    });
-  }
-
-  function handleRefuelAll() {
-    startTransition(async () => {
-      try {
-        const count = await updateAllTrucks(savePath, "RefuelAll");
-        toast.success(`Refueled ${count} trucks`);
-        invalidate();
-      } catch (err) {
-        toast.error(`Refuel failed: ${(err as Error).message ?? err}`);
-      }
-    });
-  }
+  const isPending = updateOneMutation.isPending || bulkMutation.isPending;
 
   function handleRepairOne(truck: TruckData) {
-    startTransition(async () => {
-      try {
-        await updateTruck(savePath, truck.id, { repair: true });
-        toast.success("Truck repaired");
-        invalidate();
-      } catch (err) {
-        toast.error(`Failed: ${(err as Error).message ?? err}`);
-      }
-    });
+    updateOneMutation.mutate(
+      { truckId: truck.id, changes: { repair: true } },
+      { onSuccess: () => toast.success("Truck repaired") },
+    );
   }
 
   function handleRefuelOne(truck: TruckData) {
-    startTransition(async () => {
-      try {
-        await updateTruck(savePath, truck.id, { refuel: true });
-        toast.success("Truck refueled");
-        invalidate();
-      } catch (err) {
-        toast.error(`Failed: ${(err as Error).message ?? err}`);
-      }
-    });
+    updateOneMutation.mutate(
+      { truckId: truck.id, changes: { refuel: true } },
+      { onSuccess: () => toast.success("Truck refueled") },
+    );
   }
 
-  const columns = createColumns(playerTruckId, handleRepairOne, handleRefuelOne, isPending);
+  const columns = buildColumns(
+    playerTruckId,
+    handleRepairOne,
+    handleRefuelOne,
+    isPending,
+  );
 
   return (
-    <>
-      <DataTable
-        columns={columns}
-        data={trucks}
-        emptyMessage="No trucks found"
-        onRowClick={(truck) => setSelectedTruck(truck)}
-        toolbar={
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              {trucks.length} trucks
-            </span>
-            <ButtonGroup>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRepairAll}
-                disabled={isPending}
-              >
-                <IconTool className="size-3.5" />
-                Repair All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefuelAll}
-                disabled={isPending}
-              >
-                <IconGasStation className="size-3.5" />
-                Refuel All
-              </Button>
-            </ButtonGroup>
-          </div>
-        }
-      />
-
-      {selectedTruck && (
-        <Sheet open onOpenChange={(open) => { if (!open) setSelectedTruck(null); }}>
-          <TruckDetailSheet
-            truck={selectedTruck}
-            savePath={savePath}
-            onClose={() => setSelectedTruck(null)}
-            onSaved={invalidate}
-          />
-        </Sheet>
-      )}
-    </>
+    <DataTable
+      columns={columns}
+      data={trucks}
+      getRowId={(t) => t.id}
+      emptyMessage="No trucks found"
+      onRowClick={(truck) =>
+        navigate({
+          to: "/editor/$saveId/trucks/$truckId",
+          params: { saveId, truckId: truck.id },
+        })
+      }
+      toolbar={
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {trucks.length} trucks
+          </span>
+          <ButtonGroup>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => bulkMutation.mutate("RepairAll")}
+              disabled={isPending}
+            >
+              <IconTool className="size-3.5" />
+              Repair All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => bulkMutation.mutate("RefuelAll")}
+              disabled={isPending}
+            >
+              <IconGasStation className="size-3.5" />
+              Refuel All
+            </Button>
+          </ButtonGroup>
+        </div>
+      }
+    />
   );
 }

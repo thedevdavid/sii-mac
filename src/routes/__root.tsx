@@ -8,6 +8,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/cupertino/sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ProfileProvider, useProfileState } from "@/lib/profile-context";
+import { useActivePlayset } from "@/features/mods/use-playsets";
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -48,6 +49,15 @@ function RootContent({ pageTitle }: { pageTitle: string }) {
     selectedInstallation,
     setSelectedInstallation,
   } = useProfileState();
+
+  // Eagerly fetch the active playset whenever a profile is selected.
+  // The backend seeds a temporary playset from live `active_mods` if the
+  // profile has no saved active playset — running this at the root means the
+  // seed happens regardless of which page the user lands on.
+  useActivePlayset(
+    selectedInstallation?.base_path,
+    selectedProfile?.path,
+  );
 
   return (
     <SidebarProvider className="h-svh overflow-hidden">

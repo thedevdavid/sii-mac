@@ -7,16 +7,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/cupertino/button";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/cupertino/dialog";
-import { Input } from "@/components/cupertino/input";
-import { Label } from "@/components/ui/label";
-import {
   IconDeviceFloppy,
   IconPlayerPlay,
   IconWand,
@@ -33,9 +23,11 @@ import { DriftBanner } from "./drift-banner";
 import { ApplyPlaysetConfirmation } from "./apply-playset-confirmation";
 import { AutoFixPreviewDialog } from "./auto-fix-preview-dialog";
 import { LoadOrderPopover } from "./load-order-popover";
+import { SaveAsDialog } from "./save-as-dialog";
 import { playsetDndId } from "./dnd-ids";
 import { analyzeAndReorder, reorderIsNoOp } from "./load-order";
 import { useAutoFixMode } from "@/hooks/use-autofix-mode";
+import { playsetActionHelp } from "./playset-actions-help";
 import {
   useApplyPlayset,
   useReorderPlaysetEntries,
@@ -55,6 +47,8 @@ interface PlaysetEditorProps {
   drift: DriftReport | undefined;
 }
 
+type DialogKind = "apply" | "saveAs" | "autoFix" | null;
+
 export function PlaysetEditor({
   basePath,
   profilePath,
@@ -72,10 +66,8 @@ export function PlaysetEditor({
   const acceptDriftMutation = useAcceptPlaysetDrift(basePath, profilePath);
 
   const [autoFixMode] = useAutoFixMode();
-
-  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
-  const [saveAsOpen, setSaveAsOpen] = useState(false);
-  const [autoFixPreviewOpen, setAutoFixPreviewOpen] = useState(false);
+  const [dialog, setDialog] = useState<DialogKind>(null);
+  const close = () => setDialog(null);
 
   if (!playset) {
     return (
@@ -137,9 +129,7 @@ export function PlaysetEditor({
       }
       runAutoFix(plannedOrder);
     } else {
-      // Preview mode: dialog computes its own plannedOrder live as the user
-      // edits the custom-hint textarea, so we just open it.
-      setAutoFixPreviewOpen(true);
+      setDialog("autoFix");
     }
   };
 
@@ -172,9 +162,7 @@ export function PlaysetEditor({
                 playset.entries.length === 0
               }
               title={
-                allLocked
-                  ? "All entries are locked"
-                  : "Auto-fix loading order"
+                allLocked ? "All entries are locked" : playsetActionHelp.autoFix
               }
             >
               <IconWand className="size-3.5" />
@@ -184,7 +172,8 @@ export function PlaysetEditor({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setSaveAsOpen(true)}
+                onClick={() => setDialog("saveAs")}
+                title={playsetActionHelp.saveAs}
               >
                 <IconDeviceFloppy className="size-3.5" />
                 Save as…
@@ -192,8 +181,9 @@ export function PlaysetEditor({
             )}
             <Button
               size="sm"
-              onClick={() => setApplyConfirmOpen(true)}
+              onClick={() => setDialog("apply")}
               disabled={applyMutation.isPending}
+              title={playsetActionHelp.apply}
             >
               <IconPlayerPlay className="size-3.5" />
               Apply
@@ -221,9 +211,38 @@ export function PlaysetEditor({
       <ScrollArea className="flex-1">
         <div className="space-y-1 p-2">
           {playset.entries.length === 0 ? (
-            <div className="p-6 text-center text-xs text-muted-foreground">
-              Add mods from the library.
-            </div>
+            drift && drift.live_entries.length > 0 ? (
+              <div className="space-y-2">
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-[11px]">
+                  <div className="font-medium text-amber-600 dark:text-amber-400">
+                    {drift.live_entries.length} active mod
+                    {drift.live_entries.length === 1 ? "" : "s"} in profile
+                  </div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    These mods are loaded in the game but not part of this
+                    playset. Use “Save changes” above to import them.
+                  </div>
+                </div>
+                {drift.live_entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <span className="size-1.5 rounded-full bg-amber-500" />
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      {resolveDisplayName(
+                        entry.id as ModId,
+                        entry.display_name,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-xs text-muted-foreground">
+                Add mods from the library.
+              </div>
+            )
           ) : (
             <SortableContext
               items={playset.entries.map((e) => playsetDndId(e.mod_id))}
@@ -274,113 +293,39 @@ export function PlaysetEditor({
         playset={playset}
         modsById={modsById}
         drift={drift}
-        open={applyConfirmOpen}
-        onOpenChange={setApplyConfirmOpen}
+        open={dialog === "apply"}
+        onOpenChange={(open) => !open && close()}
         isBusy={applyMutation.isPending}
         onConfirm={() => {
           applyMutation.mutate(
             { playsetId: playset.id, playsetName: playset.name },
-            {
-              onSettled: () => setApplyConfirmOpen(false),
-            },
+            { onSettled: close },
           );
         }}
       />
 
       <AutoFixPreviewDialog
-        open={autoFixPreviewOpen}
-        onOpenChange={setAutoFixPreviewOpen}
+        open={dialog === "autoFix"}
+        onOpenChange={(open) => !open && close()}
         entries={playset.entries}
         modsById={modsById}
         workshopMap={workshopMap}
         isBusy={reorderMutation.isPending}
         onApply={(plannedOrder) => {
           runAutoFix(plannedOrder);
-          setAutoFixPreviewOpen(false);
+          close();
         }}
       />
 
       <SaveAsDialog
-        open={saveAsOpen}
-        onOpenChange={setSaveAsOpen}
+        open={dialog === "saveAs"}
+        onOpenChange={(open) => !open && close()}
         defaultName={playset.name === "Temporary" ? "" : playset.name}
         onSubmit={async (name) => {
           await saveAsMutation.mutateAsync({ name });
-          setSaveAsOpen(false);
+          close();
         }}
-        isPending={saveAsMutation.isPending}
       />
     </div>
-  );
-}
-
-interface SaveAsDialogProps {
-  open: boolean;
-  defaultName: string;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string) => void;
-  isPending?: boolean;
-}
-
-function SaveAsDialog({
-  open,
-  defaultName,
-  onOpenChange,
-  onSubmit,
-  isPending,
-}: SaveAsDialogProps) {
-  const [name, setName] = useState(defaultName);
-  const trimmed = name.trim();
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setName(defaultName);
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (trimmed) onSubmit(trimmed);
-          }}
-          className="space-y-4"
-        >
-          <DialogHeader>
-            <DialogTitle>Save playset</DialogTitle>
-            <DialogDescription>
-              Give this playset a name. It will be promoted from temporary and
-              stay tied to this profile until you switch.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="save-as-name" className="text-xs">
-              Name
-            </Label>
-            <Input
-              id="save-as-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              maxLength={128}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!trimmed || isPending}>
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -160,9 +160,9 @@ fn scan_profile_dir_with(
 /// selected profile deterministic: the lowest uid wins, which matches
 /// Steam's own "last logged-in user first" convention for most users.
 fn find_steam_remote_profiles(game_base: &Path) -> Option<PathBuf> {
-    let app_id = crate::steam::app_id_from_game_base(game_base);
+    let app_id = crate::steam::paths::app_id_from_game_base(game_base);
 
-    for userdata_root in crate::steam::steam_userdata_roots_for_game(game_base) {
+    for userdata_root in crate::steam::paths::steam_userdata_roots_for_game(game_base) {
         if !userdata_root.exists() {
             continue;
         }

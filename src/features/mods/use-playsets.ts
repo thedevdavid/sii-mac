@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { formatError } from "@/lib/format-error";
 import { queryKeys } from "@/lib/query-keys";
 import type { GameBasePath, PlaysetId, ProfilePath } from "@/lib/core-types";
 import {
@@ -7,6 +9,7 @@ import {
   getActivePlayset,
   getPlayset,
   listPlaysets,
+  refreshInstallationMods,
   scanInstallationMods,
 } from "@/lib/tauri-commands";
 
@@ -36,10 +39,23 @@ export function useActivePlayset(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
+  const queryClient = useQueryClient();
   return useQuery({
-    queryKey: queryKeys.playsets.active(profilePath ?? ""),
-    queryFn: () =>
-      getActivePlayset(basePath as GameBasePath, profilePath as ProfilePath),
+    queryKey: queryKeys.playsets.active(basePath ?? "", profilePath ?? ""),
+    queryFn: async () => {
+      const playset = await getActivePlayset(
+        basePath as GameBasePath,
+        profilePath as ProfilePath,
+      );
+      // The backend reconciles a per-profile "live" temporary playset
+      // against profile.sii every time this command runs. That side effect
+      // can add or remove a playset in the installation library, so the
+      // sidebar list cache must be refetched to stay in sync.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.playsets.list(basePath ?? ""),
+      });
+      return playset;
+    },
     enabled: Boolean(basePath && profilePath),
     staleTime: Infinity,
   });
@@ -51,7 +67,11 @@ export function usePlaysetDrift(
   playsetId: PlaysetId | null | undefined,
 ) {
   return useQuery({
-    queryKey: queryKeys.playsets.drift(profilePath ?? "", playsetId ?? ""),
+    queryKey: queryKeys.playsets.drift(
+      basePath ?? "",
+      profilePath ?? "",
+      playsetId ?? "",
+    ),
     queryFn: () =>
       computePlaysetDrift(
         basePath as GameBasePath,
@@ -69,7 +89,33 @@ export function useInstallationMods(basePath: GameBasePath | null | undefined) {
     queryFn: () => scanInstallationMods(basePath as GameBasePath),
     enabled: Boolean(basePath),
     staleTime: Infinity,
+    // Filesystem scan is expensive — survive route navigations.
     gcTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+/**
+ * Force a fresh disk scan and update the React Query cache. Mods added or
+ * removed outside the app (manual file copy, mod manager, etc.) are otherwise
+ * invisible because both the Rust scan cache and React Query store the result
+ * with `staleTime: Infinity`.
+ */
+export function useRefreshInstallationMods(
+  basePath: GameBasePath | null | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => refreshInstallationMods(basePath as GameBasePath),
+    onSuccess: (mods) => {
+      queryClient.setQueryData(queryKeys.mods.scan(basePath ?? ""), mods);
+      // Drift recomputes against the freshly scanned mods, so its derived
+      // result is now stale.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.playsets.driftPrefix(basePath ?? ""),
+      });
+      toast.success(`Rescanned: ${mods.length} mods found`);
+    },
+    onError: (err) => toast.error(`Refresh failed: ${formatError(err)}`),
   });
 }
 
@@ -77,9 +123,8 @@ export function useWorkshopMetadata(
   basePath: GameBasePath | null | undefined,
   workshopIds: string[],
 ) {
-  const idsKey = workshopIds.slice().sort().join(",");
   return useQuery({
-    queryKey: [...queryKeys.workshop.metadata(basePath ?? ""), idsKey] as const,
+    queryKey: queryKeys.workshop.metadataFor(basePath ?? "", workshopIds),
     queryFn: () => fetchWorkshopMetadata(workshopIds),
     enabled: Boolean(basePath) && workshopIds.length > 0,
     staleTime: Infinity,

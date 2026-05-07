@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/cupertino/button";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { IconPlus, IconUpload } from "@tabler/icons-react";
-import { formatError } from "@/lib/format-error";
 import type { GameBasePath, ProfilePath } from "@/lib/core-types";
 import type { DriftReport, Playset } from "./types";
 import { PlaysetSidebarItem } from "./playset-sidebar-item";
@@ -13,13 +11,10 @@ import { DuplicatePlaysetDialog } from "./duplicate-playset-dialog";
 import { DeletePlaysetDialog } from "./delete-playset-dialog";
 import { usePlaysets } from "./use-playsets";
 import {
-  useSetActivePlayset,
+  useExportPlayset,
   useImportPlayset,
+  useSetActivePlayset,
 } from "./use-playset-mutations";
-import {
-  exportPlaysetToFile,
-  importPlaysetFromFile,
-} from "./playset-import-export";
 
 interface PlaysetSidebarProps {
   basePath: GameBasePath;
@@ -27,6 +22,13 @@ interface PlaysetSidebarProps {
   activePlayset: Playset | undefined;
   drift: DriftReport | undefined;
 }
+
+type DialogState =
+  | { kind: "create" }
+  | { kind: "rename"; target: Playset }
+  | { kind: "duplicate"; target: Playset }
+  | { kind: "delete"; target: Playset }
+  | null;
 
 export function PlaysetSidebar({
   basePath,
@@ -38,31 +40,10 @@ export function PlaysetSidebar({
 
   const setActive = useSetActivePlayset(basePath, profilePath);
   const importMutation = useImportPlayset(basePath);
+  const exportMutation = useExportPlayset(basePath);
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<Playset | null>(null);
-  const [duplicateTarget, setDuplicateTarget] = useState<Playset | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Playset | null>(null);
-
-  const handleExport = async (playset: Playset) => {
-    try {
-      const dest = await exportPlaysetToFile(basePath, playset.id, playset.name);
-      if (dest) toast.success(`Exported "${playset.name}"`);
-    } catch (err) {
-      toast.error(`Export failed: ${formatError(err)}`);
-    }
-  };
-
-  const handleImport = async () => {
-    try {
-      const imported = await importPlaysetFromFile(basePath);
-      if (imported) toast.success(`Imported "${imported.name}"`);
-      // Refresh list
-      importMutation.reset();
-    } catch (err) {
-      toast.error(`Import failed: ${formatError(err)}`);
-    }
-  };
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const close = () => setDialog(null);
 
   const items = playsets ?? [];
 
@@ -74,18 +55,19 @@ export function PlaysetSidebar({
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={handleImport}
+            onClick={() => importMutation.mutate()}
+            disabled={importMutation.isPending}
             aria-label="Import playset"
-            title="Import playset"
+            title="Import playset from a JSON file"
           >
             <IconUpload className="size-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => setDialog({ kind: "create" })}
             aria-label="Create playset"
-            title="Create playset"
+            title="Create a new empty playset"
           >
             <IconPlus className="size-3.5" />
           </Button>
@@ -110,10 +92,17 @@ export function PlaysetSidebar({
                     setActive.mutate({ playsetId: playset.id });
                   }
                 }}
-                onRename={() => setRenameTarget(playset)}
-                onDuplicate={() => setDuplicateTarget(playset)}
-                onExport={() => handleExport(playset)}
-                onDelete={() => setDeleteTarget(playset)}
+                onRename={() => setDialog({ kind: "rename", target: playset })}
+                onDuplicate={() =>
+                  setDialog({ kind: "duplicate", target: playset })
+                }
+                onExport={() =>
+                  exportMutation.mutate({
+                    playsetId: playset.id,
+                    defaultName: playset.name,
+                  })
+                }
+                onDelete={() => setDialog({ kind: "delete", target: playset })}
               />
             ))
           )}
@@ -122,33 +111,27 @@ export function PlaysetSidebar({
 
       <CreatePlaysetDialog
         basePath={basePath}
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={dialog?.kind === "create"}
+        onOpenChange={(open) => !open && close()}
       />
       <RenamePlaysetDialog
         basePath={basePath}
-        playset={renameTarget}
-        open={renameTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRenameTarget(null);
-        }}
+        playset={dialog?.kind === "rename" ? dialog.target : null}
+        open={dialog?.kind === "rename"}
+        onOpenChange={(open) => !open && close()}
       />
       <DuplicatePlaysetDialog
         basePath={basePath}
-        playset={duplicateTarget}
-        open={duplicateTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDuplicateTarget(null);
-        }}
+        playset={dialog?.kind === "duplicate" ? dialog.target : null}
+        open={dialog?.kind === "duplicate"}
+        onOpenChange={(open) => !open && close()}
       />
       <DeletePlaysetDialog
         basePath={basePath}
         profilePath={profilePath}
-        playset={deleteTarget}
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
+        playset={dialog?.kind === "delete" ? dialog.target : null}
+        open={dialog?.kind === "delete"}
+        onOpenChange={(open) => !open && close()}
       />
     </div>
   );

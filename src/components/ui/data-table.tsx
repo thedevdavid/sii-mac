@@ -32,6 +32,8 @@ interface DataTableProps<TData> {
   data: TData[];
   toolbar?: ReactNode;
   onRowClick?: (row: TData) => void;
+  /** Stable row identity across data updates (e.g. optimistic mutations). */
+  getRowId?: (row: TData, index: number) => string;
   emptyMessage?: string;
   initialSorting?: SortingState;
   columnFilters?: ColumnFiltersState;
@@ -46,6 +48,7 @@ export function DataTable<TData>({
   data,
   toolbar,
   onRowClick,
+  getRowId,
   emptyMessage = "No data",
   initialSorting = [],
   columnFilters = [],
@@ -59,6 +62,7 @@ export function DataTable<TData>({
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     initialState: {
       sorting: initialSorting,
       pagination: { pageSize },

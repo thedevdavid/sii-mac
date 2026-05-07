@@ -41,10 +41,6 @@ interface ModManagerProps {
 }
 
 export function ModManager({ basePath, profilePath }: ModManagerProps) {
-  // Single fetch site for the data shared across all three panels. Children
-  // receive these via props instead of re-subscribing — eliminates duplicate
-  // useQuery hooks, duplicate `extractWorkshopIds` passes, and duplicate
-  // `Map<ModId, FullModInfo>` builds.
   const { data: activePlayset, isLoading: playsetLoading } = useActivePlayset(
     basePath,
     profilePath,
@@ -85,9 +81,7 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
     if (activeId.source !== "playset" || overId.source !== "playset") return;
     if (activeId.modId === overId.modId) return;
 
-    // Refuse moves that involve a locked endpoint — locked entries pin
-    // their absolute index and dragging through them would silently shift
-    // the lock target.
+    // Locked entries pin their index — refuse drags involving them.
     const fromEntry = activePlayset.entries.find(
       (e) => e.mod_id === activeId.modId,
     );

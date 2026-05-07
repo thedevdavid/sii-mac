@@ -14,17 +14,11 @@ fn set_native_vibrancy(window: tauri::Window, enabled: bool) -> Result<(), error
     {
         use window_vibrancy::{apply_vibrancy, clear_vibrancy, NSVisualEffectMaterial};
         if enabled {
-            apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None).map_err(|e| {
-                error::AppError::Io(std::io::Error::other(format!(
-                    "apply_vibrancy failed: {e:?}"
-                )))
-            })?;
+            apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None)
+                .map_err(|e| error::AppError::Window(format!("apply_vibrancy failed: {e:?}")))?;
         } else {
-            clear_vibrancy(&window).map_err(|e| {
-                error::AppError::Io(std::io::Error::other(format!(
-                    "clear_vibrancy failed: {e:?}"
-                )))
-            })?;
+            clear_vibrancy(&window)
+                .map_err(|e| error::AppError::Window(format!("clear_vibrancy failed: {e:?}")))?;
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -37,7 +31,7 @@ fn set_native_vibrancy(window: tauri::Window, enabled: bool) -> Result<(), error
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -46,6 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::default().build())
         .manage(progress::CancelRegistry::default())
+        .manage(std::sync::Arc::new(save::cache::SaveCache::default()))
         .invoke_handler(tauri::generate_handler![
             commands::profiles::detect_game_installations,
             commands::profiles::add_custom_game_path,
@@ -61,7 +56,6 @@ pub fn run() {
             commands::playsets::rename_playset,
             commands::playsets::delete_playset,
             commands::playsets::update_playset_metadata,
-            commands::playsets::set_playset_entries,
             commands::playsets::toggle_entry_enabled,
             commands::playsets::toggle_entry_locked,
             commands::playsets::add_mod_to_playset,
@@ -99,6 +93,10 @@ pub fn run() {
             progress::cancel_job,
             set_native_vibrancy,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = result {
+        eprintln!("error while running tauri application: {e}");
+        std::process::exit(1);
+    }
 }

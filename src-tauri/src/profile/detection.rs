@@ -85,11 +85,11 @@ fn game_candidates() -> Vec<Candidate> {
             });
         }
         // Proton: `{steamapps}/compatdata/{app_id}/pfx/...`
-        for steamapps in crate::steam::steam_steamapps_roots() {
+        for steamapps in crate::steam::paths::steam_steamapps_roots() {
             let compat = steamapps.join("compatdata");
             for (game, app_id) in [
-                (Game::Ats, crate::steam::ATS_APP_ID),
-                (Game::Ets2, crate::steam::ETS2_APP_ID),
+                (Game::Ats, crate::steam::paths::ATS_APP_ID),
+                (Game::Ets2, crate::steam::paths::ETS2_APP_ID),
             ] {
                 let prefix = compat
                     .join(app_id)

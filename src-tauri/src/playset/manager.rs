@@ -86,6 +86,97 @@ pub fn validate_playset_name(name: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Maintain the per-profile "live" temporary playset that mirrors
+/// profile.sii's `active_mods` when no saved playset matches them.
+///
+/// - If `live` matches some non-temp playset's enabled set → drop the temp.
+/// - If `live` is empty → drop the temp.
+/// - Otherwise → reuse the existing temp (by `temp_playset_id`) or create
+///   a new one and record its id.
+fn ensure_live_temp_playset(
+    inst: &mut super::models::InstallationPlaysets,
+    canon: &str,
+    live: &[ModEntry],
+) {
+    use std::collections::HashSet;
+
+    let drop_temp = |inst: &mut super::models::InstallationPlaysets| {
+        if let Some(state) = inst.profile_states.get_mut(canon) {
+            if let Some(temp_id) = state.temp_playset_id.take() {
+                inst.playsets.retain(|p| p.id != temp_id);
+            }
+        }
+    };
+
+    if live.is_empty() {
+        drop_temp(inst);
+        return;
+    }
+
+    let live_ids: HashSet<&str> = live.iter().map(|m| m.id.as_str()).collect();
+    let saved_match = inst.playsets.iter().any(|p| {
+        if p.is_temporary {
+            return false;
+        }
+        let enabled: HashSet<&str> = p
+            .entries
+            .iter()
+            .filter(|e| e.enabled)
+            .map(|e| e.mod_id.as_str())
+            .collect();
+        enabled == live_ids
+    });
+
+    if saved_match {
+        drop_temp(inst);
+        return;
+    }
+
+    // Live doesn't match any saved playset — ensure a temp exists matching it.
+    let existing_temp_id = inst
+        .profile_states
+        .get(canon)
+        .and_then(|s| s.temp_playset_id.clone());
+
+    let now = now_rfc3339();
+    let entries: Vec<PlaysetEntry> = live
+        .iter()
+        .enumerate()
+        .map(|(i, m)| PlaysetEntry {
+            mod_id: m.id.clone(),
+            display_name: m.display_name.clone(),
+            enabled: true,
+            order: i as u32,
+            locked: false,
+        })
+        .collect();
+
+    if let Some(id) = existing_temp_id.as_deref() {
+        if let Some(playset) = inst.playsets.iter_mut().find(|p| p.id == id) {
+            playset.entries = entries;
+            playset.updated_at = now;
+            return;
+        }
+    }
+
+    // Create fresh temp and record its id on the profile state.
+    let temp = Playset {
+        id: Uuid::new_v4().to_string(),
+        name: "Temporary".into(),
+        is_temporary: true,
+        created_at: now.clone(),
+        updated_at: now,
+        color: None,
+        is_favorite: false,
+        thumbnail_path: None,
+        entries,
+    };
+    let temp_id = temp.id.clone();
+    inst.playsets.push(temp);
+    let state = inst.profile_states.entry(canon.to_string()).or_default();
+    state.temp_playset_id = Some(temp_id);
+}
+
 /// Build a temporary playset from live `active_mods`. All entries enabled,
 /// order = array index.
 pub fn seed_temporary_from_live_mods(live: Vec<ModEntry>) -> Playset {
@@ -115,7 +206,7 @@ pub fn seed_temporary_from_live_mods(live: Vec<ModEntry>) -> Playset {
 }
 
 /// Canonicalize order values to match vector position.
-pub fn canonicalize_entries(entries: &mut Vec<PlaysetEntry>) {
+pub fn canonicalize_entries(entries: &mut [PlaysetEntry]) {
     for (i, e) in entries.iter_mut().enumerate() {
         e.order = i as u32;
     }
@@ -164,21 +255,16 @@ pub fn reorder_entries(
             "reorder id list length does not match entry count".into(),
         ));
     }
-    let current: std::collections::HashSet<&str> = entries.iter().map(|e| e.mod_id.as_str()).collect();
+    let mut by_id: std::collections::HashMap<String, PlaysetEntry> = std::mem::take(entries)
+        .into_iter()
+        .map(|e| (e.mod_id.clone(), e))
+        .collect();
+    let mut new_order: Vec<PlaysetEntry> = Vec::with_capacity(ordered_ids.len());
     for id in ordered_ids {
-        if !current.contains(id.as_str()) {
-            return Err(AppError::PlaysetInvalid(format!(
-                "reorder id '{id}' is not in playset"
-            )));
-        }
-    }
-    let mut new_order: Vec<PlaysetEntry> = Vec::with_capacity(entries.len());
-    for id in ordered_ids {
-        let pos = entries
-            .iter()
-            .position(|e| e.mod_id == *id)
-            .expect("verified above");
-        new_order.push(entries.remove(pos));
+        let entry = by_id.remove(id).ok_or_else(|| {
+            AppError::PlaysetInvalid(format!("reorder id '{id}' is not in playset"))
+        })?;
+        new_order.push(entry);
     }
     *entries = new_order;
     canonicalize_entries(entries);
@@ -304,33 +390,6 @@ pub fn update_playset_metadata(
             .find_playset_mut(playset_id)
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
         apply_metadata_patch(playset, patch)?;
-        Ok(playset.clone())
-    })
-}
-
-pub fn set_playset_entries(
-    app_handle: &AppHandle,
-    base_path: &str,
-    playset_id: &str,
-    entries: Vec<PlaysetEntry>,
-) -> Result<Playset, AppError> {
-    // Check for duplicate mod_ids.
-    let mut seen = std::collections::HashSet::new();
-    for e in &entries {
-        if !seen.insert(&e.mod_id) {
-            return Err(AppError::PlaysetInvalid(format!(
-                "duplicate mod_id in entries: {}",
-                e.mod_id
-            )));
-        }
-    }
-    with_installation(app_handle, base_path, |inst| {
-        let playset = inst
-            .find_playset_mut(playset_id)
-            .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
-        playset.entries = entries;
-        canonicalize_entries(&mut playset.entries);
-        playset.updated_at = now_rfc3339();
         Ok(playset.clone())
     })
 }
@@ -475,26 +534,18 @@ pub fn get_active_playset(
 ) -> Result<Playset, AppError> {
     let canon = canonical_profile_path(profile_path);
 
-    // Fast read-only path: an active playset is already wired up. Avoids the
-    // disk write that the previous unconditional `with_installation` did.
-    if let Some(playset) = with_installation_ro(app_handle, base_path, |inst| {
-        Ok(inst
-            .profile_states
-            .get(&canon)
-            .and_then(|s| s.active_playset_id.as_ref())
-            .and_then(|id| inst.find_playset(id))
-            .cloned())
-    })? {
-        return Ok(playset);
-    }
-
-    // Slow path: no active playset yet — seed a temporary from live active_mods.
-    // Read the profile.sii outside the playset lock.
+    // Read profile.sii outside the playset lock. Empty result is fine — that
+    // just means no live mods, no temp playset to maintain.
     let live = read_live_active_mods(profile_path)?;
 
     with_installation(app_handle, base_path, |inst| {
-        // Re-check inside the write lock in case another caller seeded one
-        // between our RO read and the write lock.
+        // Always reconcile the per-profile "live" temp playset against the
+        // current profile.sii state so the sidebar reflects whatever the
+        // game has actually loaded — regardless of what the user picked as
+        // their explicit active playset.
+        ensure_live_temp_playset(inst, &canon, &live);
+
+        // Honour the user's explicit choice if one is set.
         if let Some(state) = inst.profile_states.get(&canon) {
             if let Some(id) = &state.active_playset_id {
                 if let Some(playset) = inst.find_playset(id) {
@@ -503,19 +554,38 @@ pub fn get_active_playset(
             }
         }
 
-        let mut playset = seed_temporary_from_live_mods(live.clone());
-        let playset_id = playset.id.clone();
-        let snapshot = playset.entries.clone();
-        canonicalize_entries(&mut playset.entries);
-        inst.playsets.push(playset.clone());
+        // No explicit active — promote the live temp (created above) when
+        // available, otherwise seed a fresh one.
+        let temp_id = inst
+            .profile_states
+            .get(&canon)
+            .and_then(|s| s.temp_playset_id.clone());
+
+        let active_id = match temp_id {
+            Some(id) if inst.find_playset(&id).is_some() => id,
+            _ => {
+                let mut playset = seed_temporary_from_live_mods(live.clone());
+                let id = playset.id.clone();
+                canonicalize_entries(&mut playset.entries);
+                inst.playsets.push(playset);
+                id
+            }
+        };
+
+        let snapshot = inst
+            .find_playset(&active_id)
+            .map(|p| p.entries.clone())
+            .unwrap_or_default();
 
         let state = inst.profile_states.entry(canon.clone()).or_default();
-        state.active_playset_id = Some(playset_id.clone());
-        state.last_applied_playset_id = Some(playset_id);
+        state.active_playset_id = Some(active_id.clone());
+        state.last_applied_playset_id = Some(active_id.clone());
         state.last_applied_at = Some(now_rfc3339());
         state.last_applied_snapshot = snapshot;
 
-        Ok(playset)
+        inst.find_playset(&active_id)
+            .cloned()
+            .ok_or_else(|| AppError::PlaysetNotFound(active_id))
     })
 }
 

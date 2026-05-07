@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Input } from "@/components/cupertino/input";
+import { Button } from "@/components/cupertino/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter";
+import { IconRefresh } from "@tabler/icons-react";
 import type { GameBasePath, ProfilePath } from "@/lib/core-types";
 import type { FullModInfo, Playset, WorkshopMetadataMap } from "./types";
 import { ModLibraryRow } from "./mod-library-row";
@@ -10,6 +12,7 @@ import {
   useAddModToPlayset,
   useRemoveModFromPlayset,
 } from "./use-playset-mutations";
+import { useRefreshInstallationMods } from "./use-playsets";
 import {
   mergeWorkshopMetadata,
   type EnrichedMod,
@@ -42,6 +45,7 @@ export function ModLibrary({
 
   const addMutation = useAddModToPlayset(basePath, profilePath);
   const removeMutation = useRemoveModFromPlayset(basePath, profilePath);
+  const refreshMutation = useRefreshInstallationMods(basePath);
 
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
@@ -54,9 +58,6 @@ export function ModLibrary({
     activePlayset?.entries.map((e) => e.mod_id) ?? [],
   );
 
-  // Single pass over `mods` to build enriched list, category counts, and
-  // source counts. Replaces three separate iterations + N inner `.filter()`
-  // calls to count categories.
   const { allMods, categoryCounts, workshopCount, localCount } = aggregateMods(
     mods,
     workshopMap,
@@ -120,6 +121,20 @@ export function ModLibrary({
               ({filtered.length} / {allMods.length})
             </span>
           </h2>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+            aria-label="Rescan mod folder"
+            title="Rescan mod folder for files added or removed outside the app"
+          >
+            <IconRefresh
+              className={
+                refreshMutation.isPending ? "size-3.5 animate-spin" : "size-3.5"
+              }
+            />
+          </Button>
         </div>
         <Input
           value={search}
@@ -202,11 +217,6 @@ export function ModLibrary({
   );
 }
 
-/**
- * Single-pass aggregation: enrich each mod with workshop metadata while
- * counting categories and sources. One iteration replaces an `.map()` and
- * three `.filter().length` passes plus a `.flatMap()` + Set + sort.
- */
 function aggregateMods(
   mods: FullModInfo[] | undefined,
   workshopMap: WorkshopMetadataMap | undefined,

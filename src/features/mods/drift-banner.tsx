@@ -1,6 +1,7 @@
 import { Button } from "@/components/cupertino/button";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import type { DriftReport } from "./types";
+import { playsetActionHelp } from "./playset-actions-help";
 
 interface DriftBannerProps {
   drift: DriftReport;
@@ -42,6 +43,7 @@ export function DriftBanner({
           className="text-[11px]"
           onClick={onRevert}
           disabled={isBusy}
+          title={playsetActionHelp.revertDrift}
         >
           Revert
         </Button>
@@ -51,6 +53,7 @@ export function DriftBanner({
           className="text-[11px]"
           onClick={onAcceptChanges}
           disabled={isBusy}
+          title={playsetActionHelp.acceptDrift}
         >
           Save changes
         </Button>

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tauri::ipc::Channel;
 use tauri_plugin_store::StoreExt;
 
+use crate::commands::run_blocking;
 use crate::error::AppError;
 use crate::profile::models::{
     CloneOptions, FullModInfo, GameInstallation, InstallSource, ProfileContents, ProfileDetail,
@@ -65,23 +66,23 @@ pub fn remove_custom_game_path(app_handle: tauri::AppHandle, path: String) -> Re
         .ok()
         .map(|p| p.to_string_lossy().to_string());
     let mut paths = read_custom_paths(&app_handle)?;
-    paths.retain(|p| p != &path && Some(p.clone()) != canonical);
+    paths.retain(|p| p != &path && canonical.as_deref() != Some(p.as_str()));
     write_custom_paths(&app_handle, &paths)
 }
 
 #[tauri::command]
-pub fn list_profiles(profiles_path: String) -> Result<Vec<ProfileSummary>, AppError> {
-    manager::list_profiles(&profiles_path)
+pub async fn list_profiles(profiles_path: String) -> Result<Vec<ProfileSummary>, AppError> {
+    run_blocking(move || manager::list_profiles(&profiles_path)).await
 }
 
 #[tauri::command]
-pub fn get_profile_detail(profile_path: String) -> Result<ProfileDetail, AppError> {
-    manager::get_profile_detail(&profile_path)
+pub async fn get_profile_detail(profile_path: String) -> Result<ProfileDetail, AppError> {
+    run_blocking(move || manager::get_profile_detail(&profile_path)).await
 }
 
 #[tauri::command]
-pub fn scan_profile_contents(profile_path: String) -> Result<ProfileContents, AppError> {
-    scanner::scan_profile_contents(&profile_path)
+pub async fn scan_profile_contents(profile_path: String) -> Result<ProfileContents, AppError> {
+    run_blocking(move || scanner::scan_profile_contents(&profile_path)).await
 }
 
 #[tauri::command]
@@ -121,41 +122,50 @@ pub fn clone_profile(
 }
 
 #[tauri::command]
-pub fn rename_profile(profile_path: String, new_name: String) -> Result<ProfileSummary, AppError> {
-    manager::rename_profile(&profile_path, &new_name)
+pub async fn rename_profile(
+    profile_path: String,
+    new_name: String,
+) -> Result<ProfileSummary, AppError> {
+    run_blocking(move || manager::rename_profile(&profile_path, &new_name)).await
 }
 
 #[tauri::command]
-pub fn delete_profile(profile_path: String) -> Result<(), AppError> {
-    manager::delete_profile(&profile_path)
+pub async fn delete_profile(profile_path: String) -> Result<(), AppError> {
+    run_blocking(move || manager::delete_profile(&profile_path)).await
 }
 
 #[tauri::command]
-pub fn scan_installation_mods(
+pub async fn scan_installation_mods(
     app_handle: tauri::AppHandle,
     base_path: String,
 ) -> Result<Vec<FullModInfo>, AppError> {
-    mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)
+    run_blocking(move || mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)).await
 }
 
 #[tauri::command]
-pub fn refresh_installation_mods(
+pub async fn refresh_installation_mods(
     app_handle: tauri::AppHandle,
     base_path: String,
 ) -> Result<Vec<FullModInfo>, AppError> {
-    mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
-    mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)
+    run_blocking(move || {
+        mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
+        mod_scanner::scan_installation_mods(Some(&app_handle), &base_path)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_local_mod(
+pub async fn delete_local_mod(
     app_handle: tauri::AppHandle,
     base_path: String,
     mod_id: String,
 ) -> Result<(), AppError> {
-    mod_writer::delete_local_mod(&base_path, &mod_id)?;
-    mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
-    Ok(())
+    run_blocking(move || {
+        mod_writer::delete_local_mod(&base_path, &mod_id)?;
+        mod_scanner::invalidate_installation_mods_cache(Some(&app_handle), &base_path);
+        Ok(())
+    })
+    .await
 }
 
 // --- Store helpers ---

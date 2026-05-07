@@ -30,7 +30,7 @@ pub fn parse_siin(text: &str) -> Result<SiiDocument, String> {
         if let Some((class, id)) = try_parse_object_header(trimmed) {
             let fields = parse_object_body(&mut lines)
                 .map_err(|e| format!("in object `{class} : {id}`: {e}"))?;
-            doc.objects.push(SiiObject { class, id, fields });
+            doc.push_object(SiiObject { class, id, fields });
         }
     }
 

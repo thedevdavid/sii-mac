@@ -5,7 +5,7 @@ use crate::error::AppError;
 use crate::playset::{
     io,
     manager,
-    models::{DriftReport, Playset, PlaysetEntry, PlaysetMetadataPatch},
+    models::{DriftReport, Playset, PlaysetMetadataPatch},
 };
 
 #[tauri::command]
@@ -80,16 +80,6 @@ pub fn update_playset_metadata(
     patch: PlaysetMetadataPatch,
 ) -> Result<Playset, AppError> {
     manager::update_playset_metadata(&app_handle, &base_path, &playset_id, patch)
-}
-
-#[tauri::command]
-pub fn set_playset_entries(
-    app_handle: tauri::AppHandle,
-    base_path: String,
-    playset_id: String,
-    entries: Vec<PlaysetEntry>,
-) -> Result<Playset, AppError> {
-    manager::set_playset_entries(&app_handle, &base_path, &playset_id, entries)
 }
 
 #[tauri::command]

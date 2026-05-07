@@ -36,8 +36,7 @@ export function DeletePlaysetDialog({
           <AlertDialogTitle>Delete playset?</AlertDialogTitle>
           <AlertDialogDescription>
             Permanently remove <span className="font-medium">{playset?.name}</span>.
-            This cannot be undone. Active playsets can't be deleted — switch
-            profiles or activate a different playset first.
+            This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

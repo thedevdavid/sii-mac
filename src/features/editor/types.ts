@@ -195,3 +195,15 @@ export type GarageChange = z.infer<typeof GarageChangeSchema>;
 
 export const BulkActionSchema = z.enum(["RepairAll", "RefuelAll"]);
 export type BulkAction = z.infer<typeof BulkActionSchema>;
+
+// ---------------------------------------------------------------------------
+// Mutation response payloads (returned from Rust commands so the React Query
+// cache can be patched without a full save refetch)
+// ---------------------------------------------------------------------------
+
+export const PlayerUpdateResultSchema = z.object({
+  player: PlayerDataSchema,
+  bank: BankDataSchema,
+  economy: EconomyDataSchema,
+});
+export type PlayerUpdateResult = z.infer<typeof PlayerUpdateResultSchema>;

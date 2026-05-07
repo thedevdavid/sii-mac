@@ -244,7 +244,7 @@ fn scan_workshop_mods(base_path: &str) -> Vec<FullModInfo> {
     // substring matching here. `app_id_from_game_base` checks for real
     // marker files first and falls back to name-based detection, matching
     // whatever Steam installed.
-    let app_id = crate::steam::app_id_from_game_base(Path::new(base_path));
+    let app_id = crate::steam::paths::app_id_from_game_base(Path::new(base_path));
 
     let (workshop_dirs, workshop_manifests) = discover_workshop_paths(app_id);
 
@@ -273,14 +273,13 @@ fn scan_workshop_mods(base_path: &str) -> Vec<FullModInfo> {
 
     entries
         .par_iter()
-        .map(|entry_path| {
-            let ws_item_id = entry_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
+        .filter_map(|entry_path| {
+            let ws_item_id = entry_path.file_name()?.to_string_lossy().into_owned();
 
-            // Workshop mod ID: hex-encode the numeric ID to match active_mods format
-            let hex_id = format!("{:016X}", ws_item_id.parse::<u64>().unwrap_or(0));
+            // Workshop mod ID: hex-encode the numeric ID to match active_mods
+            // format. Skip directories whose name isn't a valid u64 — otherwise
+            // every malformed entry would collide on the all-zero hex id.
+            let hex_id = format!("{:016X}", ws_item_id.parse::<u64>().ok()?);
             let mod_id = format!("mod_workshop_package.{}", hex_id);
 
             // Try "latest/" subdir first, then the root of the workshop item.
@@ -299,7 +298,7 @@ fn scan_workshop_mods(base_path: &str) -> Vec<FullModInfo> {
                 .or_else(|| steam_titles.get(&ws_item_id).cloned())
                 .unwrap_or_else(|| format!("Workshop #{}", ws_item_id));
 
-            match manifest {
+            Some(match manifest {
                 Some(m) => FullModInfo {
                     id: mod_id,
                     display_name,
@@ -324,7 +323,7 @@ fn scan_workshop_mods(base_path: &str) -> Vec<FullModInfo> {
                     size: None,
                     workshop_id: Some(ws_item_id),
                 },
-            }
+            })
         })
         .collect()
 }
@@ -336,7 +335,7 @@ fn discover_workshop_paths(app_id: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut workshop_dirs: Vec<PathBuf> = Vec::new();
     let mut workshop_manifests: Vec<PathBuf> = Vec::new();
 
-    for steamapps in crate::steam::steam_steamapps_roots() {
+    for steamapps in crate::steam::paths::steam_steamapps_roots() {
         let ws_path = steamapps.join("workshop/content").join(app_id);
         if ws_path.exists() {
             workshop_dirs.push(ws_path);

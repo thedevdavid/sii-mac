@@ -1,5 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import { useInvalidatingMutation } from "@/hooks/use-mutations";
+import { formatError } from "@/lib/format-error";
 import { queryKeys } from "@/lib/query-keys";
 import type {
   GameBasePath,
@@ -21,37 +24,82 @@ import {
   reorderPlaysetEntries,
   saveActiveAsPlayset,
   setActivePlayset,
-  setPlaysetEntries,
   toggleEntryEnabled,
   toggleEntryLocked,
   updatePlaysetMetadata,
 } from "@/lib/tauri-commands";
-import type {
-  Playset,
-  PlaysetEntry,
-  PlaysetMetadataPatch,
-} from "./types";
+import type { Playset, PlaysetMetadataPatch } from "./types";
 
-/**
- * Mutation hooks for the mod manager. Non-optimistic hooks use the
- * `useInvalidatingMutation` helper directly; optimistic hooks add
- * `onMutate`/`onError`/`onSettled` callbacks that apply a local cache edit
- * immediately and roll back on failure.
- *
- * All optimistic hooks target `playsets.active(profilePath)` because the
- * editor always shows the currently active playset. If the user is editing a
- * non-active playset (e.g. from the sidebar), the mutation still runs but
- * optimism is skipped and the invalidation refetches cleanly.
- */
+// Prefix-only keys invalidate every matching subtree (e.g. all active-playset
+// queries for a base path). Always go through `queryKeys` so key shape stays
+// owned by `src/lib/query-keys.ts`.
 
-// --- Non-optimistic ---
+const listKey = (basePath: GameBasePath | null | undefined) =>
+  queryKeys.playsets.list(basePath ?? "");
+
+const activeKey = (
+  basePath: GameBasePath | null | undefined,
+  profilePath: ProfilePath | null | undefined,
+) => queryKeys.playsets.active(basePath ?? "", profilePath ?? "");
+
+const detailPrefix = (basePath: GameBasePath | null | undefined) =>
+  queryKeys.playsets.detailPrefix(basePath ?? "");
+
+const activePrefix = (basePath: GameBasePath | null | undefined) =>
+  queryKeys.playsets.activePrefix(basePath ?? "");
+
+const driftPrefix = (
+  basePath: GameBasePath | null | undefined,
+  profilePath?: ProfilePath | null | undefined,
+) =>
+  profilePath !== undefined
+    ? queryKeys.playsets.driftPrefix(basePath ?? "", profilePath ?? "")
+    : queryKeys.playsets.driftPrefix(basePath ?? "");
+
+// --- Optimistic helper for entry-level edits on the active playset ---
+
+function useOptimisticPlaysetMutation<TVars>(config: {
+  basePath: GameBasePath | null | undefined;
+  profilePath: ProfilePath | null | undefined;
+  mutationFn: (vars: TVars) => Promise<Playset>;
+  apply: (current: Playset, vars: TVars) => Playset;
+  successToast?: (data: Playset, vars: TVars) => string;
+  errorPrefix?: string;
+}) {
+  const queryClient = useQueryClient();
+  const aKey = activeKey(config.basePath, config.profilePath);
+  return useInvalidatingMutation<Playset, TVars, { previous: Playset | undefined }>({
+    mutationFn: config.mutationFn,
+    invalidate: [
+      aKey,
+      listKey(config.basePath),
+      driftPrefix(config.basePath, config.profilePath),
+    ],
+    successToast: config.successToast,
+    errorPrefix: config.errorPrefix,
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: aKey });
+      const previous = queryClient.getQueryData<Playset>(aKey);
+      if (previous) {
+        queryClient.setQueryData(aKey, config.apply(previous, vars));
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(aKey, context.previous);
+      }
+    },
+  });
+}
+
+// --- Playset CRUD ---
 
 export function useCreatePlayset(basePath: GameBasePath | null | undefined) {
   return useInvalidatingMutation<Playset, { name: string }>({
-    mutationFn: ({ name }) =>
-      createPlayset(basePath as GameBasePath, name),
-    invalidate: [queryKeys.playsets.list(basePath ?? "")],
-    successToast: (playset) => `Playset "${playset.name}" created`,
+    mutationFn: ({ name }) => createPlayset(basePath as GameBasePath, name),
+    invalidate: [listKey(basePath)],
+    successToast: (p) => `Playset "${p.name}" created`,
     errorPrefix: "Create failed",
   });
 }
@@ -63,8 +111,8 @@ export function useDuplicatePlayset(basePath: GameBasePath | null | undefined) {
   >({
     mutationFn: ({ playsetId, newName }) =>
       duplicatePlayset(basePath as GameBasePath, playsetId, newName),
-    invalidate: [queryKeys.playsets.list(basePath ?? "")],
-    successToast: (playset) => `Playset "${playset.name}" created`,
+    invalidate: [listKey(basePath)],
+    successToast: (p) => `Playset "${p.name}" created`,
     errorPrefix: "Duplicate failed",
   });
 }
@@ -77,9 +125,9 @@ export function useRenamePlayset(basePath: GameBasePath | null | undefined) {
     mutationFn: ({ playsetId, newName }) =>
       renamePlayset(basePath as GameBasePath, playsetId, newName),
     invalidate: [
-      queryKeys.playsets.list(basePath ?? ""),
-      ["playsets", "detail", basePath ?? ""],
-      ["playsets", "active"],
+      listKey(basePath),
+      detailPrefix(basePath),
+      activePrefix(basePath),
     ],
     successToast: () => "Playset renamed",
     errorPrefix: "Rename failed",
@@ -96,8 +144,9 @@ export function useUpdatePlaysetMetadata(
     mutationFn: ({ playsetId, patch }) =>
       updatePlaysetMetadata(basePath as GameBasePath, playsetId, patch),
     invalidate: [
-      queryKeys.playsets.list(basePath ?? ""),
-      ["playsets", "detail", basePath ?? ""],
+      listKey(basePath),
+      detailPrefix(basePath),
+      activePrefix(basePath),
     ],
     errorPrefix: "Update failed",
   });
@@ -111,15 +160,17 @@ export function useDeletePlayset(
     mutationFn: ({ playsetId }) =>
       deletePlayset(basePath as GameBasePath, playsetId),
     invalidate: [
-      queryKeys.playsets.list(basePath ?? ""),
-      queryKeys.playsets.active(profilePath ?? ""),
-      ["playsets", "drift", profilePath ?? ""],
-      ["playsets", "detail", basePath ?? ""],
+      listKey(basePath),
+      detailPrefix(basePath),
+      activeKey(basePath, profilePath),
+      driftPrefix(basePath, profilePath),
     ],
     successToast: () => "Playset deleted",
     errorPrefix: "Delete failed",
   });
 }
+
+// --- Profile-scoped save flows ---
 
 export function useSetActivePlayset(
   basePath: GameBasePath | null | undefined,
@@ -133,8 +184,8 @@ export function useSetActivePlayset(
         playsetId,
       ),
     invalidate: [
-      queryKeys.playsets.active(profilePath ?? ""),
-      ["playsets", "drift", profilePath ?? ""],
+      activeKey(basePath, profilePath),
+      driftPrefix(basePath, profilePath),
     ],
     errorPrefix: "Activate failed",
   });
@@ -156,8 +207,8 @@ export function useApplyPlayset(
       ),
     invalidate: [
       queryKeys.profiles.detail(profilePath ?? ""),
-      queryKeys.playsets.active(profilePath ?? ""),
-      ["playsets", "drift", profilePath ?? ""],
+      activeKey(basePath, profilePath),
+      driftPrefix(basePath, profilePath),
     ],
     successToast: (_data, { playsetName }) => `Applied "${playsetName}"`,
     errorPrefix: "Apply failed",
@@ -175,11 +226,8 @@ export function useSaveActiveAsPlayset(
         profilePath as ProfilePath,
         name,
       ),
-    invalidate: [
-      queryKeys.playsets.list(basePath ?? ""),
-      queryKeys.playsets.active(profilePath ?? ""),
-    ],
-    successToast: (playset) => `Saved as "${playset.name}"`,
+    invalidate: [listKey(basePath), activeKey(basePath, profilePath)],
+    successToast: (p) => `Saved as "${p.name}"`,
     errorPrefix: "Save failed",
   });
 }
@@ -196,111 +244,81 @@ export function useAcceptPlaysetDrift(
         playsetId,
       ),
     invalidate: [
-      queryKeys.playsets.active(profilePath ?? ""),
-      ["playsets", "drift", profilePath ?? ""],
+      activeKey(basePath, profilePath),
+      driftPrefix(basePath, profilePath),
     ],
     successToast: () => "Changes saved to playset",
     errorPrefix: "Save failed",
   });
 }
 
-export function useExportPlayset() {
-  return useInvalidatingMutation<
-    void,
-    {
-      basePath: GameBasePath;
-      playsetId: PlaysetId;
-      destinationPath: string;
-      displayName: string;
-    }
-  >({
-    mutationFn: ({ basePath, playsetId, destinationPath }) =>
-      exportPlayset(basePath, playsetId, destinationPath),
-    invalidate: [],
-    successToast: (_data, { displayName }) => `Exported "${displayName}"`,
-    errorPrefix: "Export failed",
-  });
+// --- Import / Export (dialog folded in) ---
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\:*?"<>|]/g, "-").trim() || "playset";
 }
 
 export function useImportPlayset(basePath: GameBasePath | null | undefined) {
-  return useInvalidatingMutation<Playset, { sourcePath: string }>({
-    mutationFn: ({ sourcePath }) =>
-      importPlayset(basePath as GameBasePath, sourcePath),
-    invalidate: [queryKeys.playsets.list(basePath ?? "")],
-    successToast: (playset) => `Imported "${playset.name}"`,
-    errorPrefix: "Import failed",
-  });
-}
-
-// --- Optimistic ---
-
-interface ActiveSnapshot {
-  previous: Playset | undefined;
-  previousList: Playset[] | undefined;
-}
-
-type OptimisticUpdater = (current: Playset) => Playset;
-
-function useOptimisticActiveMutation<TVars>(config: {
-  basePath: GameBasePath | null | undefined;
-  profilePath: ProfilePath | null | undefined;
-  mutationFn: (vars: TVars) => Promise<Playset>;
-  apply: (vars: TVars) => OptimisticUpdater;
-  successToast?: (data: Playset, vars: TVars) => string;
-  errorPrefix?: string;
-}) {
   const queryClient = useQueryClient();
-  const activeKey = queryKeys.playsets.active(config.profilePath ?? "");
-  const driftKeyPrefix = ["playsets", "drift", config.profilePath ?? ""];
-  const listKey = queryKeys.playsets.list(config.basePath ?? "");
-
-  return useInvalidatingMutation<Playset, TVars, ActiveSnapshot>({
-    mutationFn: config.mutationFn,
-    invalidate: [activeKey, driftKeyPrefix, listKey],
-    successToast: config.successToast,
-    errorPrefix: config.errorPrefix,
-    onMutate: async (vars) => {
-      await queryClient.cancelQueries({ queryKey: activeKey });
-      await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<Playset>(activeKey);
-      const previousList = queryClient.getQueryData<Playset[]>(listKey);
-      if (previous) {
-        const next = config.apply(vars)(previous);
-        queryClient.setQueryData(activeKey, next);
-        if (previousList) {
-          queryClient.setQueryData(
-            listKey,
-            previousList.map((p) => (p.id === next.id ? next : p)),
-          );
-        }
-      }
-      return { previous, previousList };
+  return useMutation({
+    mutationFn: async (): Promise<Playset | null> => {
+      const source = await openDialog({
+        multiple: false,
+        filters: [{ name: "Playset", extensions: ["json"] }],
+      });
+      if (!source || Array.isArray(source)) return null;
+      return importPlayset(basePath as GameBasePath, source);
     },
-    onError: (
-      _err: Error,
-      _vars: TVars,
-      context: ActiveSnapshot | undefined,
-    ) => {
-      if (context?.previous !== undefined) {
-        queryClient.setQueryData(activeKey, context.previous);
-      }
-      if (context?.previousList !== undefined) {
-        queryClient.setQueryData(listKey, context.previousList);
-      }
+    onSuccess: (playset) => {
+      if (!playset) return;
+      queryClient.invalidateQueries({ queryKey: listKey(basePath) });
+      toast.success(`Imported "${playset.name}"`);
     },
+    onError: (err) => toast.error(`Import failed: ${formatError(err)}`),
   });
 }
+
+export function useExportPlayset(basePath: GameBasePath | null | undefined) {
+  return useMutation({
+    mutationFn: async ({
+      playsetId,
+      defaultName,
+    }: {
+      playsetId: PlaysetId;
+      defaultName: string;
+    }): Promise<{ name: string } | null> => {
+      const destination = await saveDialog({
+        defaultPath: `${sanitizeFilename(defaultName)}.json`,
+        filters: [{ name: "Playset", extensions: ["json"] }],
+      });
+      if (!destination) return null;
+      await exportPlayset(basePath as GameBasePath, playsetId, destination);
+      return { name: defaultName };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      toast.success(`Exported "${result.name}"`);
+    },
+    onError: (err) => toast.error(`Export failed: ${formatError(err)}`),
+  });
+}
+
+// --- Optimistic entry edits ---
 
 export function useToggleEntryEnabled(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useOptimisticActiveMutation<{ modId: ModId; enabled: boolean; playsetId: PlaysetId }>({
+  return useOptimisticPlaysetMutation<{
+    playsetId: PlaysetId;
+    modId: ModId;
+    enabled: boolean;
+  }>({
     basePath,
     profilePath,
     mutationFn: ({ playsetId, modId, enabled }) =>
       toggleEntryEnabled(basePath as GameBasePath, playsetId, modId, enabled),
-    apply: ({ modId, enabled }) => (current) => ({
+    apply: (current, { modId, enabled }) => ({
       ...current,
       entries: current.entries.map((entry) =>
         entry.mod_id === modId ? { ...entry, enabled } : entry,
@@ -314,12 +332,16 @@ export function useToggleEntryLocked(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useOptimisticActiveMutation<{ modId: ModId; locked: boolean; playsetId: PlaysetId }>({
+  return useOptimisticPlaysetMutation<{
+    playsetId: PlaysetId;
+    modId: ModId;
+    locked: boolean;
+  }>({
     basePath,
     profilePath,
     mutationFn: ({ playsetId, modId, locked }) =>
       toggleEntryLocked(basePath as GameBasePath, playsetId, modId, locked),
-    apply: ({ modId, locked }) => (current) => ({
+    apply: (current, { modId, locked }) => ({
       ...current,
       entries: current.entries.map((entry) =>
         entry.mod_id === modId ? { ...entry, locked } : entry,
@@ -333,7 +355,7 @@ export function useAddModToPlayset(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useOptimisticActiveMutation<{
+  return useOptimisticPlaysetMutation<{
     playsetId: PlaysetId;
     modId: ModId;
     displayName: string;
@@ -342,7 +364,7 @@ export function useAddModToPlayset(
     profilePath,
     mutationFn: ({ playsetId, modId, displayName }) =>
       addModToPlayset(basePath as GameBasePath, playsetId, modId, displayName),
-    apply: ({ modId, displayName }) => (current) => ({
+    apply: (current, { modId, displayName }) => ({
       ...current,
       entries: [
         ...current.entries,
@@ -364,7 +386,7 @@ export function useRemoveModFromPlayset(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useOptimisticActiveMutation<{
+  return useOptimisticPlaysetMutation<{
     playsetId: PlaysetId;
     modId: ModId;
     displayName: string;
@@ -373,7 +395,7 @@ export function useRemoveModFromPlayset(
     profilePath,
     mutationFn: ({ playsetId, modId }) =>
       removeModFromPlayset(basePath as GameBasePath, playsetId, modId),
-    apply: ({ modId }) => (current) => ({
+    apply: (current, { modId }) => ({
       ...current,
       entries: current.entries
         .filter((entry) => entry.mod_id !== modId)
@@ -388,7 +410,7 @@ export function useReorderPlaysetEntries(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useOptimisticActiveMutation<{
+  return useOptimisticPlaysetMutation<{
     playsetId: PlaysetId;
     orderedModIds: ModId[];
   }>({
@@ -400,36 +422,16 @@ export function useReorderPlaysetEntries(
         playsetId,
         orderedModIds,
       ),
-    apply: ({ orderedModIds }) => (current) => {
+    apply: (current, { orderedModIds }) => {
       const byId = new Map(current.entries.map((e) => [e.mod_id, e]));
       const reordered = orderedModIds
         .map((id, index) => {
           const entry = byId.get(id);
           return entry ? { ...entry, order: index } : null;
         })
-        .filter((entry): entry is PlaysetEntry => entry !== null);
+        .filter((entry) => entry !== null);
       return { ...current, entries: reordered };
     },
     errorPrefix: "Reorder failed",
-  });
-}
-
-export function useSetPlaysetEntries(
-  basePath: GameBasePath | null | undefined,
-  profilePath: ProfilePath | null | undefined,
-) {
-  return useOptimisticActiveMutation<{
-    playsetId: PlaysetId;
-    entries: PlaysetEntry[];
-  }>({
-    basePath,
-    profilePath,
-    mutationFn: ({ playsetId, entries }) =>
-      setPlaysetEntries(basePath as GameBasePath, playsetId, entries),
-    apply: ({ entries }) => (current) => ({
-      ...current,
-      entries: entries.map((entry, index) => ({ ...entry, order: index })),
-    }),
-    errorPrefix: "Update failed",
   });
 }

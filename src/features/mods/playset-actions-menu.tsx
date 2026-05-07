@@ -17,6 +17,10 @@ import type { Playset } from "./types";
 
 interface PlaysetActionsMenuProps {
   playset: Playset;
+  /** Active playsets cannot be deleted — the backend rejects it. Hide the
+      destructive option entirely instead of letting the user click into a
+      dialog whose Delete button will fail. */
+  isActive: boolean;
   onRename: () => void;
   onDuplicate: () => void;
   onExport: () => void;
@@ -25,6 +29,7 @@ interface PlaysetActionsMenuProps {
 
 export function PlaysetActionsMenu({
   playset,
+  isActive,
   onRename,
   onDuplicate,
   onExport,
@@ -57,11 +62,15 @@ export function PlaysetActionsMenu({
           <IconDownload className="size-3.5" />
           Export JSON
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <IconTrash className="size-3.5" />
-          Delete
-        </DropdownMenuItem>
+        {!isActive && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <IconTrash className="size-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

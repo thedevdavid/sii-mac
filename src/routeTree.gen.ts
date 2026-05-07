@@ -18,6 +18,13 @@ import { Route as CloneRouteImport } from './routes/clone'
 import { Route as BackupsRouteImport } from './routes/backups'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EditorSaveIdRouteImport } from './routes/editor.$saveId'
+import { Route as EditorSaveIdIndexRouteImport } from './routes/editor.$saveId.index'
+import { Route as EditorSaveIdWorldRouteImport } from './routes/editor.$saveId.world'
+import { Route as EditorSaveIdTrucksRouteImport } from './routes/editor.$saveId.trucks'
+import { Route as EditorSaveIdTrailersRouteImport } from './routes/editor.$saveId.trailers'
+import { Route as EditorSaveIdPlayerRouteImport } from './routes/editor.$saveId.player'
+import { Route as EditorSaveIdTrucksTruckIdRouteImport } from './routes/editor.$saveId.trucks.$truckId'
+import { Route as EditorSaveIdTrailersTrailerIdRouteImport } from './routes/editor.$saveId.trailers.$trailerId'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -64,6 +71,43 @@ const EditorSaveIdRoute = EditorSaveIdRouteImport.update({
   path: '/editor/$saveId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditorSaveIdIndexRoute = EditorSaveIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EditorSaveIdRoute,
+} as any)
+const EditorSaveIdWorldRoute = EditorSaveIdWorldRouteImport.update({
+  id: '/world',
+  path: '/world',
+  getParentRoute: () => EditorSaveIdRoute,
+} as any)
+const EditorSaveIdTrucksRoute = EditorSaveIdTrucksRouteImport.update({
+  id: '/trucks',
+  path: '/trucks',
+  getParentRoute: () => EditorSaveIdRoute,
+} as any)
+const EditorSaveIdTrailersRoute = EditorSaveIdTrailersRouteImport.update({
+  id: '/trailers',
+  path: '/trailers',
+  getParentRoute: () => EditorSaveIdRoute,
+} as any)
+const EditorSaveIdPlayerRoute = EditorSaveIdPlayerRouteImport.update({
+  id: '/player',
+  path: '/player',
+  getParentRoute: () => EditorSaveIdRoute,
+} as any)
+const EditorSaveIdTrucksTruckIdRoute =
+  EditorSaveIdTrucksTruckIdRouteImport.update({
+    id: '/$truckId',
+    path: '/$truckId',
+    getParentRoute: () => EditorSaveIdTrucksRoute,
+  } as any)
+const EditorSaveIdTrailersTrailerIdRoute =
+  EditorSaveIdTrailersTrailerIdRouteImport.update({
+    id: '/$trailerId',
+    path: '/$trailerId',
+    getParentRoute: () => EditorSaveIdTrailersRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -74,7 +118,14 @@ export interface FileRoutesByFullPath {
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
-  '/editor/$saveId': typeof EditorSaveIdRoute
+  '/editor/$saveId': typeof EditorSaveIdRouteWithChildren
+  '/editor/$saveId/player': typeof EditorSaveIdPlayerRoute
+  '/editor/$saveId/trailers': typeof EditorSaveIdTrailersRouteWithChildren
+  '/editor/$saveId/trucks': typeof EditorSaveIdTrucksRouteWithChildren
+  '/editor/$saveId/world': typeof EditorSaveIdWorldRoute
+  '/editor/$saveId/': typeof EditorSaveIdIndexRoute
+  '/editor/$saveId/trailers/$trailerId': typeof EditorSaveIdTrailersTrailerIdRoute
+  '/editor/$saveId/trucks/$truckId': typeof EditorSaveIdTrucksTruckIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,7 +136,13 @@ export interface FileRoutesByTo {
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
-  '/editor/$saveId': typeof EditorSaveIdRoute
+  '/editor/$saveId/player': typeof EditorSaveIdPlayerRoute
+  '/editor/$saveId/trailers': typeof EditorSaveIdTrailersRouteWithChildren
+  '/editor/$saveId/trucks': typeof EditorSaveIdTrucksRouteWithChildren
+  '/editor/$saveId/world': typeof EditorSaveIdWorldRoute
+  '/editor/$saveId': typeof EditorSaveIdIndexRoute
+  '/editor/$saveId/trailers/$trailerId': typeof EditorSaveIdTrailersTrailerIdRoute
+  '/editor/$saveId/trucks/$truckId': typeof EditorSaveIdTrucksTruckIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,7 +154,14 @@ export interface FileRoutesById {
   '/overview': typeof OverviewRoute
   '/saves': typeof SavesRoute
   '/settings': typeof SettingsRoute
-  '/editor/$saveId': typeof EditorSaveIdRoute
+  '/editor/$saveId': typeof EditorSaveIdRouteWithChildren
+  '/editor/$saveId/player': typeof EditorSaveIdPlayerRoute
+  '/editor/$saveId/trailers': typeof EditorSaveIdTrailersRouteWithChildren
+  '/editor/$saveId/trucks': typeof EditorSaveIdTrucksRouteWithChildren
+  '/editor/$saveId/world': typeof EditorSaveIdWorldRoute
+  '/editor/$saveId/': typeof EditorSaveIdIndexRoute
+  '/editor/$saveId/trailers/$trailerId': typeof EditorSaveIdTrailersTrailerIdRoute
+  '/editor/$saveId/trucks/$truckId': typeof EditorSaveIdTrucksTruckIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +175,13 @@ export interface FileRouteTypes {
     | '/saves'
     | '/settings'
     | '/editor/$saveId'
+    | '/editor/$saveId/player'
+    | '/editor/$saveId/trailers'
+    | '/editor/$saveId/trucks'
+    | '/editor/$saveId/world'
+    | '/editor/$saveId/'
+    | '/editor/$saveId/trailers/$trailerId'
+    | '/editor/$saveId/trucks/$truckId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -121,7 +192,13 @@ export interface FileRouteTypes {
     | '/overview'
     | '/saves'
     | '/settings'
+    | '/editor/$saveId/player'
+    | '/editor/$saveId/trailers'
+    | '/editor/$saveId/trucks'
+    | '/editor/$saveId/world'
     | '/editor/$saveId'
+    | '/editor/$saveId/trailers/$trailerId'
+    | '/editor/$saveId/trucks/$truckId'
   id:
     | '__root__'
     | '/'
@@ -133,6 +210,13 @@ export interface FileRouteTypes {
     | '/saves'
     | '/settings'
     | '/editor/$saveId'
+    | '/editor/$saveId/player'
+    | '/editor/$saveId/trailers'
+    | '/editor/$saveId/trucks'
+    | '/editor/$saveId/world'
+    | '/editor/$saveId/'
+    | '/editor/$saveId/trailers/$trailerId'
+    | '/editor/$saveId/trucks/$truckId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -144,7 +228,7 @@ export interface RootRouteChildren {
   OverviewRoute: typeof OverviewRoute
   SavesRoute: typeof SavesRoute
   SettingsRoute: typeof SettingsRoute
-  EditorSaveIdRoute: typeof EditorSaveIdRoute
+  EditorSaveIdRoute: typeof EditorSaveIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -212,8 +296,99 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EditorSaveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/editor/$saveId/': {
+      id: '/editor/$saveId/'
+      path: '/'
+      fullPath: '/editor/$saveId/'
+      preLoaderRoute: typeof EditorSaveIdIndexRouteImport
+      parentRoute: typeof EditorSaveIdRoute
+    }
+    '/editor/$saveId/world': {
+      id: '/editor/$saveId/world'
+      path: '/world'
+      fullPath: '/editor/$saveId/world'
+      preLoaderRoute: typeof EditorSaveIdWorldRouteImport
+      parentRoute: typeof EditorSaveIdRoute
+    }
+    '/editor/$saveId/trucks': {
+      id: '/editor/$saveId/trucks'
+      path: '/trucks'
+      fullPath: '/editor/$saveId/trucks'
+      preLoaderRoute: typeof EditorSaveIdTrucksRouteImport
+      parentRoute: typeof EditorSaveIdRoute
+    }
+    '/editor/$saveId/trailers': {
+      id: '/editor/$saveId/trailers'
+      path: '/trailers'
+      fullPath: '/editor/$saveId/trailers'
+      preLoaderRoute: typeof EditorSaveIdTrailersRouteImport
+      parentRoute: typeof EditorSaveIdRoute
+    }
+    '/editor/$saveId/player': {
+      id: '/editor/$saveId/player'
+      path: '/player'
+      fullPath: '/editor/$saveId/player'
+      preLoaderRoute: typeof EditorSaveIdPlayerRouteImport
+      parentRoute: typeof EditorSaveIdRoute
+    }
+    '/editor/$saveId/trucks/$truckId': {
+      id: '/editor/$saveId/trucks/$truckId'
+      path: '/$truckId'
+      fullPath: '/editor/$saveId/trucks/$truckId'
+      preLoaderRoute: typeof EditorSaveIdTrucksTruckIdRouteImport
+      parentRoute: typeof EditorSaveIdTrucksRoute
+    }
+    '/editor/$saveId/trailers/$trailerId': {
+      id: '/editor/$saveId/trailers/$trailerId'
+      path: '/$trailerId'
+      fullPath: '/editor/$saveId/trailers/$trailerId'
+      preLoaderRoute: typeof EditorSaveIdTrailersTrailerIdRouteImport
+      parentRoute: typeof EditorSaveIdTrailersRoute
+    }
   }
 }
+
+interface EditorSaveIdTrailersRouteChildren {
+  EditorSaveIdTrailersTrailerIdRoute: typeof EditorSaveIdTrailersTrailerIdRoute
+}
+
+const EditorSaveIdTrailersRouteChildren: EditorSaveIdTrailersRouteChildren = {
+  EditorSaveIdTrailersTrailerIdRoute: EditorSaveIdTrailersTrailerIdRoute,
+}
+
+const EditorSaveIdTrailersRouteWithChildren =
+  EditorSaveIdTrailersRoute._addFileChildren(EditorSaveIdTrailersRouteChildren)
+
+interface EditorSaveIdTrucksRouteChildren {
+  EditorSaveIdTrucksTruckIdRoute: typeof EditorSaveIdTrucksTruckIdRoute
+}
+
+const EditorSaveIdTrucksRouteChildren: EditorSaveIdTrucksRouteChildren = {
+  EditorSaveIdTrucksTruckIdRoute: EditorSaveIdTrucksTruckIdRoute,
+}
+
+const EditorSaveIdTrucksRouteWithChildren =
+  EditorSaveIdTrucksRoute._addFileChildren(EditorSaveIdTrucksRouteChildren)
+
+interface EditorSaveIdRouteChildren {
+  EditorSaveIdPlayerRoute: typeof EditorSaveIdPlayerRoute
+  EditorSaveIdTrailersRoute: typeof EditorSaveIdTrailersRouteWithChildren
+  EditorSaveIdTrucksRoute: typeof EditorSaveIdTrucksRouteWithChildren
+  EditorSaveIdWorldRoute: typeof EditorSaveIdWorldRoute
+  EditorSaveIdIndexRoute: typeof EditorSaveIdIndexRoute
+}
+
+const EditorSaveIdRouteChildren: EditorSaveIdRouteChildren = {
+  EditorSaveIdPlayerRoute: EditorSaveIdPlayerRoute,
+  EditorSaveIdTrailersRoute: EditorSaveIdTrailersRouteWithChildren,
+  EditorSaveIdTrucksRoute: EditorSaveIdTrucksRouteWithChildren,
+  EditorSaveIdWorldRoute: EditorSaveIdWorldRoute,
+  EditorSaveIdIndexRoute: EditorSaveIdIndexRoute,
+}
+
+const EditorSaveIdRouteWithChildren = EditorSaveIdRoute._addFileChildren(
+  EditorSaveIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -224,7 +399,7 @@ const rootRouteChildren: RootRouteChildren = {
   OverviewRoute: OverviewRoute,
   SavesRoute: SavesRoute,
   SettingsRoute: SettingsRoute,
-  EditorSaveIdRoute: EditorSaveIdRoute,
+  EditorSaveIdRoute: EditorSaveIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
