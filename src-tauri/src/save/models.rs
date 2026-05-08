@@ -10,6 +10,13 @@ pub struct SaveData {
     pub trailers: Vec<TrailerData>,
     pub garages: Vec<GarageData>,
     pub drivers: Vec<DriverData>,
+    /// On-disk format of `game.sii` as detected from the file's magic bytes.
+    /// One of: `"plaintext"` (SiiNunit), `"encrypted"` (ScsC), `"binaryBsii"`
+    /// (BSII), `"obfuscated3nK"` (3nK), or `"unknown"`. Used for diagnostics
+    /// only — the writer always emits plaintext SiiNunit, which the game
+    /// loader accepts regardless of the value of `g_save_format`.
+    #[serde(rename = "fileFormat")]
+    pub file_format: String,
 }
 
 /// Economy root data from the `economy` object.

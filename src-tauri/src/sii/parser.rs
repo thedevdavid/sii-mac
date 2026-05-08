@@ -112,10 +112,13 @@ fn parse_value(s: &str) -> SiiValue {
         }
     }
 
-    // Hex-encoded float: &3f400000
-    if s.starts_with('&') {
-        if let Some(f) = try_parse_hex_float(s) {
-            return SiiValue::Float(f);
+    // Hex-encoded float: &3f400000 — preserved as raw bits so the writer can
+    // emit the same `&XXXXXXXX` form. Decimal round-trip would drift the f32
+    // bit pattern by one or two ulp, and the game's save loader rejects some
+    // edited saves when fields like `game_time_secs` come back in decimal.
+    if let Some(hex) = s.strip_prefix('&') {
+        if let Ok(bits) = u32::from_str_radix(hex, 16) {
+            return SiiValue::HexFloat(bits);
         }
     }
 
@@ -143,6 +146,12 @@ fn parse_value(s: &str) -> SiiValue {
 
 
 fn try_parse_placement(s: &str) -> Option<SiiValue> {
+    // Hex-encoded components (`&3f800000`) need byte-exact round-trip; the
+    // current Placement variant only stores f64 and would drift the f32 bits
+    // back to decimal. Leaving the raw text as a Token preserves the file.
+    if s.contains('&') {
+        return None;
+    }
     let paren_groups: Vec<&str> = s.split(") (").collect();
     if paren_groups.len() != 2 {
         return None;
@@ -172,6 +181,12 @@ fn try_parse_placement(s: &str) -> Option<SiiValue> {
 
 fn try_parse_vector(s: &str) -> Option<Vec<f64>> {
     let inner = s.trim_start_matches('(').trim_end_matches(')');
+    // Hex-encoded components fall back to Token (raw text) so the writer
+    // emits the same `&XXXXXXXX` form. Decimal round-trip drifts the f32
+    // bit pattern, which the game's save loader rejects.
+    if inner.contains('&') {
+        return None;
+    }
     let sep = if inner.contains(';') { ';' } else { ',' };
     inner
         .split(sep)
@@ -184,11 +199,6 @@ fn parse_number_component(s: &str) -> Option<f64> {
         return try_parse_hex_float_raw(stripped);
     }
     s.parse::<f64>().ok()
-}
-
-fn try_parse_hex_float(s: &str) -> Option<f64> {
-    let hex = s.strip_prefix('&')?;
-    try_parse_hex_float_raw(hex)
 }
 
 fn try_parse_hex_float_raw(hex: &str) -> Option<f64> {
@@ -334,12 +344,16 @@ vehicle : vehicle.storage.123 {
     }
 
     #[test]
-    fn test_parse_hex_float() {
+    fn test_parse_hex_float_preserves_bits() {
+        // Hex floats survive parse → serialize byte-perfectly. Decimal
+        // round-trip drifts the f32 bit pattern, which the game rejects.
         let val = parse_value("&3f000000");
-        if let SiiValue::Float(f) = val {
-            assert!((f - 0.5).abs() < 0.001);
-        } else {
-            panic!("Expected Float, got {:?}", val);
+        match val {
+            SiiValue::HexFloat(bits) => {
+                assert_eq!(bits, 0x3f000000);
+                assert!((f32::from_bits(bits) - 0.5).abs() < 0.001);
+            }
+            other => panic!("Expected HexFloat, got {other:?}"),
         }
     }
 

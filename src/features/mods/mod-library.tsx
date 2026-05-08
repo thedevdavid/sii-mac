@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Input } from "@/components/cupertino/input";
 import { Button } from "@/components/cupertino/button";
+import { Checkbox } from "@/components/cupertino/checkbox";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter";
 import { IconRefresh } from "@tabler/icons-react";
@@ -29,7 +31,7 @@ interface ModLibraryProps {
 }
 
 /** Estimated row height in px — used by the virtualizer to size the scroller. */
-const ROW_HEIGHT = 56;
+const ROW_HEIGHT = 64;
 
 export function ModLibrary({
   basePath,
@@ -113,20 +115,19 @@ export function ModLibrary({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b border-border p-3">
+      <div className="space-y-3 border-b border-border p-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-xs font-semibold">
             Mod Library
-            <span className="ml-1 text-muted-foreground">
-              ({filtered.length} / {allMods.length})
+            <span className="ml-1 font-normal text-muted-foreground">
+              {filtered.length} of {allMods.length}
             </span>
           </h2>
           <Button
-            variant="ghost"
-            size="icon-sm"
+            variant="outline"
+            size="sm"
             onClick={() => refreshMutation.mutate()}
             disabled={refreshMutation.isPending}
-            aria-label="Rescan mod folder"
             title="Rescan mod folder for files added or removed outside the app"
           >
             <IconRefresh
@@ -134,15 +135,16 @@ export function ModLibrary({
                 refreshMutation.isPending ? "size-3.5 animate-spin" : "size-3.5"
               }
             />
+            Rescan
           </Button>
         </div>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search mods..."
-          className="h-7 text-xs"
+          className="h-8 text-xs"
         />
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {sourceOptions.length > 1 && (
             <DataTableFacetedFilter
               title="Source"
@@ -159,15 +161,19 @@ export function ModLibrary({
               onSelectionChange={setCategoryFilter}
             />
           )}
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
+          <div className="ml-auto flex items-center gap-1.5">
+            <Checkbox
+              id="hide-added"
               checked={hideAdded}
-              onChange={(e) => setHideAdded(e.target.checked)}
-              className="size-3"
+              onCheckedChange={(value) => setHideAdded(value === true)}
             />
-            Hide already added
-          </label>
+            <Label
+              htmlFor="hide-added"
+              className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              Hide added
+            </Label>
+          </div>
         </div>
       </div>
 

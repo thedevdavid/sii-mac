@@ -56,6 +56,13 @@ export const PlaysetEntrySchema = z.object({
    * Zod doesn't reject them.
    */
   locked: z.boolean().default(false),
+  /**
+   * Sticky-cluster id. Entries sharing the same `lock_group` stay contiguous
+   * in their current relative order during auto-reorder, but the cluster as
+   * a whole may move. `null` / absent = not in any group. Older payloads
+   * predate this field so it defaults to `null`.
+   */
+  lock_group: z.string().nullable().default(null),
 });
 export type PlaysetEntry = z.infer<typeof PlaysetEntrySchema>;
 

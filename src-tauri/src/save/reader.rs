@@ -21,18 +21,34 @@ pub fn read_save(save_path: &str) -> Result<SaveData, AppError> {
     }
 
     let data = fs::read(&game_sii)?;
+    let format = sii::detect_format(&data);
     let text = sii::decode_sii_file(&data)?;
     let doc = parse_siin(&text).map_err(AppError::SiiDecode)?;
 
-    extract_save_data(&doc)
+    let mut save = extract_save_data(&doc)?;
+    save.file_format = format_tag(format).to_string();
+    Ok(save)
 }
 
-/// Get the raw parsed SiiDocument for a save (used by writer).
-pub fn read_save_document(save_path: &str) -> Result<SiiDocument, AppError> {
+fn format_tag(format: sii::SiiFileFormat) -> &'static str {
+    match format {
+        sii::SiiFileFormat::Plaintext => "plaintext",
+        sii::SiiFileFormat::Encrypted => "encrypted",
+        sii::SiiFileFormat::BinaryBsii => "binaryBsii",
+        sii::SiiFileFormat::Obfuscated3nK => "obfuscated3nK",
+        sii::SiiFileFormat::Unknown => "unknown",
+    }
+}
+
+/// Get the raw parsed SiiDocument for a save (used by writer), along with
+/// the original on-disk format so the writer can round-trip back to it.
+pub fn read_save_document(save_path: &str) -> Result<(SiiDocument, sii::SiiFileFormat), AppError> {
     let game_sii = Path::new(save_path).join("game.sii");
     let data = fs::read(&game_sii)?;
+    let format = sii::detect_format(&data);
     let text = sii::decode_sii_file(&data)?;
-    parse_siin(&text).map_err(AppError::SiiDecode)
+    let doc = parse_siin(&text).map_err(AppError::SiiDecode)?;
+    Ok((doc, format))
 }
 
 fn extract_save_data(doc: &SiiDocument) -> Result<SaveData, AppError> {
@@ -52,6 +68,9 @@ fn extract_save_data(doc: &SiiDocument) -> Result<SaveData, AppError> {
         trailers,
         garages,
         drivers,
+        // Filled in by `read_save`; default for callers that build SaveData
+        // directly from a parsed document.
+        file_format: "plaintext".to_string(),
     })
 }
 
@@ -371,4 +390,3 @@ mod tests {
         assert!(!save.garages.is_empty(), "Should find garages");
     }
 }
-

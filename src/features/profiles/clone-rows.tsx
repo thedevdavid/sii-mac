@@ -6,8 +6,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { formatSize, type CheckState } from "./clone-utils";
+import { useId } from "react";
 
 /**
  * Collapsible group header row: shown for each category of clone-able items
@@ -94,17 +96,25 @@ export function ItemRow({
   onToggle: () => void;
   subtitle?: string;
 }) {
+  const checkboxId = useId();
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50">
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50">
       <span className="size-5" />
-      <Checkbox checked={checked} onCheckedChange={onToggle} />
-      <span className="min-w-0 flex-1 text-sm">
+      <Checkbox
+        id={checkboxId}
+        checked={checked}
+        onCheckedChange={onToggle}
+      />
+      <Label
+        htmlFor={checkboxId}
+        className="min-w-0 flex-1 cursor-pointer text-sm font-normal"
+      >
         <span className="truncate">{label}</span>
         {subtitle && (
           <span className="ml-2 text-xs text-muted-foreground">{subtitle}</span>
         )}
-      </span>
+      </Label>
       <span className="text-xs text-muted-foreground">{formatSize(size)}</span>
-    </label>
+    </div>
   );
 }

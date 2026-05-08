@@ -31,6 +31,14 @@ macro_rules! warn_fallback {
 /// atomic-rename the tmp over `target`. On any failure the tmp file is removed
 /// and the live target is left untouched.
 ///
+/// Backup behavior — TWO files are maintained:
+/// - `<backup>` — most-recent pre-edit snapshot. Refreshed on every call so the
+///   user can undo the last edit specifically.
+/// - `<backup>.original` — the very first pre-edit snapshot for this target.
+///   Created the first time we touch the file and **never overwritten** while
+///   it exists. This guarantees the user can always recover the state the file
+///   was in before any of our edits, no matter how many times they've saved.
+///
 /// Why: `fs::write` is not atomic — a partial write or a crash mid-flush can
 /// leave both the live file and a newly-created backup in an inconsistent state.
 /// This helper narrows the window where the target is in a bad state to a single
@@ -58,6 +66,15 @@ where
 
         if let Some(backup_path) = backup {
             if target.exists() {
+                // Preserve the first pre-edit state forever. `.bak.original`
+                // is sticky — only created if it doesn't exist yet, never
+                // overwritten by subsequent writes.
+                let original = original_backup_path(backup_path);
+                if !original.exists() {
+                    fs::copy(target, &original)?;
+                }
+                // The plain `.bak` rotates on every write — most recent
+                // pre-edit state, useful for undoing the last operation.
                 fs::copy(target, backup_path)?;
             }
         }
@@ -69,6 +86,12 @@ where
         let _ = fs::remove_file(&tmp);
     }
     result
+}
+
+fn original_backup_path(backup: &Path) -> PathBuf {
+    let mut name = backup.file_name().unwrap_or_default().to_os_string();
+    name.push(".original");
+    backup.with_file_name(name)
 }
 
 fn tmp_sibling(target: &Path) -> Result<PathBuf, AppError> {
@@ -385,6 +408,37 @@ mod tests {
         atomic_replace_verified(&target, Some(&backup), b"updated", |_| Ok(())).unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"updated");
         assert_eq!(fs::read(&backup).unwrap(), b"original");
+    }
+
+    /// `.bak.original` is created on the first write and **never overwritten**
+    /// by subsequent writes. This protects the user from losing the true
+    /// pre-app-edit state through a chain of edits.
+    #[test]
+    fn test_atomic_replace_verified_preserves_original_across_multiple_writes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("live.txt");
+        let backup = tmp.path().join("live.txt.bak");
+        let original = tmp.path().join("live.txt.bak.original");
+        fs::write(&target, b"v0_pristine").unwrap();
+
+        // First edit: both .bak and .bak.original capture v0.
+        atomic_replace_verified(&target, Some(&backup), b"v1", |_| Ok(())).unwrap();
+        assert_eq!(fs::read(&backup).unwrap(), b"v0_pristine");
+        assert_eq!(fs::read(&original).unwrap(), b"v0_pristine");
+
+        // Second edit: .bak rotates to v1, but .bak.original stays at v0.
+        atomic_replace_verified(&target, Some(&backup), b"v2", |_| Ok(())).unwrap();
+        assert_eq!(fs::read(&backup).unwrap(), b"v1");
+        assert_eq!(
+            fs::read(&original).unwrap(),
+            b"v0_pristine",
+            "the pristine original must survive every subsequent edit"
+        );
+
+        // Third edit: still pinned.
+        atomic_replace_verified(&target, Some(&backup), b"v3", |_| Ok(())).unwrap();
+        assert_eq!(fs::read(&backup).unwrap(), b"v2");
+        assert_eq!(fs::read(&original).unwrap(), b"v0_pristine");
     }
 
     #[test]

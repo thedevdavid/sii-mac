@@ -148,6 +148,7 @@ fn ensure_live_temp_playset(
             enabled: true,
             order: i as u32,
             locked: false,
+            lock_group: None,
         })
         .collect();
 
@@ -190,6 +191,7 @@ pub fn seed_temporary_from_live_mods(live: Vec<ModEntry>) -> Playset {
             enabled: true,
             order: i as u32,
             locked: false,
+            lock_group: None,
         })
         .collect();
     Playset {
@@ -453,10 +455,13 @@ pub fn add_mod_to_playset(
         let playset = inst
             .find_playset_mut(playset_id)
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+        // Idempotent: if the mod is already present, return the playset
+        // unchanged. The frontend's optimistic-update cache can race with the
+        // backend (the user clicks faster than React Query reconciles), and a
+        // user-facing "already in playset" error in that case is just noise —
+        // the desired end state already holds.
         if playset.entries.iter().any(|e| e.mod_id == mod_id) {
-            return Err(AppError::PlaysetInvalid(format!(
-                "mod_id '{mod_id}' already in playset"
-            )));
+            return Ok(playset.clone());
         }
         let order = playset.entries.len() as u32;
         playset.entries.push(PlaysetEntry {
@@ -465,6 +470,7 @@ pub fn add_mod_to_playset(
             enabled: true,
             order,
             locked: false,
+            lock_group: None,
         });
         playset.updated_at = now_rfc3339();
         Ok(playset.clone())
@@ -483,13 +489,51 @@ pub fn remove_mod_from_playset(
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
         let before = playset.entries.len();
         playset.entries.retain(|e| e.mod_id != mod_id);
-        if playset.entries.len() == before {
-            return Err(AppError::PlaysetInvalid(format!(
-                "mod_id '{mod_id}' not in playset"
-            )));
+        // Idempotent: removing a mod that isn't in the playset is a no-op.
+        // The desired end state ("not present") already holds; surfacing an
+        // error here just produces toast noise on rapid clicks.
+        if playset.entries.len() != before {
+            canonicalize_entries(&mut playset.entries);
+            playset.updated_at = now_rfc3339();
         }
-        canonicalize_entries(&mut playset.entries);
-        playset.updated_at = now_rfc3339();
+        Ok(playset.clone())
+    })
+}
+
+/// Assign or clear a `lock_group` for a set of entries in one shot. Pass
+/// `Some("<uuid>")` to bind the listed mods into a sticky cluster — they will
+/// remain contiguous in their current relative order during auto-reorder.
+/// Pass `None` to clear the group from each listed mod (ungroup).
+///
+/// Mods not currently in the playset are silently skipped, since the typical
+/// caller is the multi-select toolbar where the selection set may be slightly
+/// stale relative to disk state.
+pub fn set_entries_lock_group(
+    app_handle: &AppHandle,
+    base_path: &str,
+    playset_id: &str,
+    mod_ids: &[String],
+    lock_group: Option<&str>,
+) -> Result<Playset, AppError> {
+    with_installation(app_handle, base_path, |inst| {
+        let playset = inst
+            .find_playset_mut(playset_id)
+            .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+        let target_ids: std::collections::HashSet<&str> =
+            mod_ids.iter().map(|s| s.as_str()).collect();
+        let mut touched = false;
+        for entry in playset.entries.iter_mut() {
+            if target_ids.contains(entry.mod_id.as_str()) {
+                let new_value = lock_group.map(|s| s.to_string());
+                if entry.lock_group != new_value {
+                    entry.lock_group = new_value;
+                    touched = true;
+                }
+            }
+        }
+        if touched {
+            playset.updated_at = now_rfc3339();
+        }
         Ok(playset.clone())
     })
 }
@@ -632,6 +676,18 @@ pub fn apply_playset(
         let playset = inst
             .find_playset(playset_id)
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
+        // Safety: refuse to apply an empty playset. The user's curated mod
+        // list is precious — if the playset is somehow empty (regression,
+        // bug, accidental drift-accept), don't propagate that to profile.sii.
+        // Refusing here preserves the live state until the playset is
+        // restored or explicitly emptied by the user.
+        if playset.entries.is_empty() {
+            return Err(AppError::PlaysetInvalid(format!(
+                "refusing to apply empty playset `{}` — it has no entries. \
+                 Either add mods to it first, or apply a different playset.",
+                playset.name
+            )));
+        }
         let entries = entries_to_mod_entries(&playset.entries);
         let snapshot = playset.entries.clone();
         Ok((entries, snapshot))
@@ -674,24 +730,43 @@ pub fn accept_playset_drift(
             .find_playset_mut(playset_id)
             .ok_or_else(|| AppError::PlaysetNotFound(playset_id.to_string()))?;
 
+        // Safety: refuse to wipe a curated playset by accepting an empty live
+        // state. The drift "Save changes" button has no undo, and the live
+        // state can be empty for plenty of reasons (game just installed,
+        // profile reset, wrong profile selected). If the user truly wants
+        // an empty playset they can create one explicitly.
+        if !playset.entries.is_empty() && live.is_empty() {
+            return Err(AppError::PlaysetInvalid(format!(
+                "refusing to overwrite playset `{}` ({} entries) with empty profile state — \
+                 the live profile has no active mods, which would wipe your playset. \
+                 Apply this playset to the profile instead, or edit the playset directly.",
+                playset.name,
+                playset.entries.len()
+            )));
+        }
+
         // Overwrite entries from live. Preserve enabled flag where possible
         // (if a mod is enabled in live, it stays enabled in the playset).
         // Carry the user's lock flags across the drift accept so a re-sync
         // doesn't silently unlock previously-pinned entries.
-        let prior_locked: std::collections::HashMap<&str, bool> = playset
+        let prior_state: std::collections::HashMap<&str, (bool, Option<String>)> = playset
             .entries
             .iter()
-            .map(|e| (e.mod_id.as_str(), e.locked))
+            .map(|e| (e.mod_id.as_str(), (e.locked, e.lock_group.clone())))
             .collect();
         let new_entries: Vec<PlaysetEntry> = live
             .iter()
             .enumerate()
-            .map(|(i, m)| PlaysetEntry {
-                mod_id: m.id.clone(),
-                display_name: m.display_name.clone(),
-                enabled: true,
-                order: i as u32,
-                locked: prior_locked.get(m.id.as_str()).copied().unwrap_or(false),
+            .map(|(i, m)| {
+                let prior = prior_state.get(m.id.as_str()).cloned();
+                PlaysetEntry {
+                    mod_id: m.id.clone(),
+                    display_name: m.display_name.clone(),
+                    enabled: true,
+                    order: i as u32,
+                    locked: prior.as_ref().map(|p| p.0).unwrap_or(false),
+                    lock_group: prior.and_then(|p| p.1),
+                }
             })
             .collect();
         playset.entries = new_entries.clone();

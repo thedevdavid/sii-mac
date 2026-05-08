@@ -19,6 +19,7 @@ import type {
 import type { FullModInfo, Playset, WorkshopMetadataMap } from "./types";
 import type { DriftReport } from "./types";
 import { PlaysetEntryRow } from "./playset-entry-row";
+import { PlaysetSelectionToolbar } from "./playset-selection-toolbar";
 import { DriftBanner } from "./drift-banner";
 import { ApplyPlaysetConfirmation } from "./apply-playset-confirmation";
 import { AutoFixPreviewDialog } from "./auto-fix-preview-dialog";
@@ -35,7 +36,7 @@ import {
   useToggleEntryEnabled,
   useToggleEntryLocked,
   useSaveActiveAsPlayset,
-  useAcceptPlaysetDrift,
+  useSetEntriesLockGroup,
 } from "./use-playset-mutations";
 
 interface PlaysetEditorProps {
@@ -63,11 +64,25 @@ export function PlaysetEditor({
   const toggleMutation = useToggleEntryEnabled(basePath, profilePath);
   const lockMutation = useToggleEntryLocked(basePath, profilePath);
   const saveAsMutation = useSaveActiveAsPlayset(basePath, profilePath);
-  const acceptDriftMutation = useAcceptPlaysetDrift(basePath, profilePath);
+  const groupMutation = useSetEntriesLockGroup(basePath, profilePath);
 
   const [autoFixMode] = useAutoFixMode();
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<ModId>>(new Set());
   const close = () => setDialog(null);
+
+  const toggleSelected = (modId: ModId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modId)) {
+        next.delete(modId);
+      } else {
+        next.add(modId);
+      }
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   if (!playset) {
     return (
@@ -99,6 +114,96 @@ export function PlaysetEditor({
       orderedModIds: newOrder.map((e) => e.mod_id),
     });
   };
+
+  const moveEntryToEdge = (index: number, edge: "top" | "bottom") => {
+    if (index < 0 || index >= playset.entries.length) return;
+    const newOrder = [...playset.entries];
+    const [moved] = newOrder.splice(index, 1);
+    if (edge === "top") {
+      newOrder.unshift(moved);
+    } else {
+      newOrder.push(moved);
+    }
+    reorderMutation.mutate({
+      playsetId: playset.id,
+      orderedModIds: newOrder.map((e) => e.mod_id),
+    });
+  };
+
+  const moveSelectionToEdge = (edge: "top" | "bottom") => {
+    if (selectedIds.size === 0) return;
+    const selected = playset.entries.filter((e) =>
+      selectedIds.has(e.mod_id as ModId),
+    );
+    const others = playset.entries.filter(
+      (e) => !selectedIds.has(e.mod_id as ModId),
+    );
+    const newOrder =
+      edge === "top" ? [...selected, ...others] : [...others, ...selected];
+    reorderMutation.mutate({
+      playsetId: playset.id,
+      orderedModIds: newOrder.map((e) => e.mod_id) as ModId[],
+    });
+  };
+
+  const applyToSelection = (
+    mutate: (modId: ModId, displayName: string) => void,
+  ) => {
+    for (const entry of playset.entries) {
+      const id = entry.mod_id as ModId;
+      if (selectedIds.has(id)) {
+        mutate(id, entry.display_name);
+      }
+    }
+  };
+
+  const bulkSetEnabled = (enabled: boolean) => {
+    applyToSelection((modId) =>
+      toggleMutation.mutate({ playsetId: playset.id, modId, enabled }),
+    );
+  };
+  const bulkSetLocked = (locked: boolean) => {
+    applyToSelection((modId) =>
+      lockMutation.mutate({ playsetId: playset.id, modId, locked }),
+    );
+  };
+  const bulkRemove = () => {
+    applyToSelection((modId, displayName) =>
+      removeMutation.mutate({ playsetId: playset.id, modId, displayName }),
+    );
+    clearSelection();
+  };
+
+  const bulkGroup = () => {
+    if (selectedIds.size < 2) return;
+    const groupId = crypto.randomUUID();
+    groupMutation.mutate({
+      playsetId: playset.id,
+      modIds: Array.from(selectedIds),
+      lockGroup: groupId,
+    });
+  };
+
+  const bulkUngroup = () => {
+    if (selectedIds.size === 0) return;
+    groupMutation.mutate({
+      playsetId: playset.id,
+      modIds: Array.from(selectedIds),
+      lockGroup: null,
+    });
+  };
+
+  const selectedEntries = playset.entries.filter((e) =>
+    selectedIds.has(e.mod_id as ModId),
+  );
+  const selectionGroups = new Set(
+    selectedEntries.map((e) => e.lock_group ?? null),
+  );
+  const allShareGroup =
+    selectedEntries.length >= 2 &&
+    selectionGroups.size === 1 &&
+    !selectionGroups.has(null);
+  const anyHasGroup = selectedEntries.some((e) => e.lock_group != null);
 
   const runAutoFix = (orderedIds: ModId[]) => {
     reorderMutation.mutate({
@@ -136,8 +241,8 @@ export function PlaysetEditor({
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-2 border-b border-border p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1 basis-[12rem]">
             <div className="truncate text-xs font-semibold">
               {playset.name}
               {playset.is_temporary && (
@@ -146,11 +251,11 @@ export function PlaysetEditor({
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-muted-foreground">
+            <div className="whitespace-nowrap text-[10px] text-muted-foreground">
               {enabledCount} / {playset.entries.length} enabled
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <LoadOrderPopover />
             <Button
               size="sm"
@@ -191,19 +296,36 @@ export function PlaysetEditor({
           </div>
         </div>
 
-        {drift?.has_drift && (
-          <DriftBanner
-            drift={drift}
-            onRevert={() =>
-              applyMutation.mutate({
-                playsetId: playset.id,
-                playsetName: playset.name,
-              })
+        {drift?.has_drift && <DriftBanner drift={drift} />}
+
+        {selectedIds.size > 0 && (
+          <PlaysetSelectionToolbar
+            selectedCount={selectedIds.size}
+            totalCount={playset.entries.length}
+            allShareGroup={allShareGroup}
+            anyHasGroup={anyHasGroup}
+            onClear={clearSelection}
+            onSelectAll={() =>
+              setSelectedIds(
+                new Set(playset.entries.map((e) => e.mod_id as ModId)),
+              )
             }
-            onAcceptChanges={() =>
-              acceptDriftMutation.mutate({ playsetId: playset.id })
+            onEnable={() => bulkSetEnabled(true)}
+            onDisable={() => bulkSetEnabled(false)}
+            onLock={() => bulkSetLocked(true)}
+            onUnlock={() => bulkSetLocked(false)}
+            onGroup={bulkGroup}
+            onUngroup={bulkUngroup}
+            onMoveToTop={() => moveSelectionToEdge("top")}
+            onMoveToBottom={() => moveSelectionToEdge("bottom")}
+            onRemove={bulkRemove}
+            isBusy={
+              reorderMutation.isPending ||
+              toggleMutation.isPending ||
+              lockMutation.isPending ||
+              removeMutation.isPending ||
+              groupMutation.isPending
             }
-            isBusy={applyMutation.isPending || acceptDriftMutation.isPending}
           />
         )}
       </div>
@@ -275,6 +397,13 @@ export function PlaysetEditor({
                   }
                   onMoveUp={() => moveEntry(index, -1)}
                   onMoveDown={() => moveEntry(index, 1)}
+                  onMoveToTop={() => moveEntryToEdge(index, "top")}
+                  onMoveToBottom={() => moveEntryToEdge(index, "bottom")}
+                  isSelected={selectedIds.has(entry.mod_id as ModId)}
+                  hasSelection={selectedIds.size > 0}
+                  onToggleSelected={() =>
+                    toggleSelected(entry.mod_id as ModId)
+                  }
                   onToggleLocked={(locked) =>
                     lockMutation.mutate({
                       playsetId: playset.id,

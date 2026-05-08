@@ -61,6 +61,7 @@ pub fn run() {
             commands::playsets::add_mod_to_playset,
             commands::playsets::remove_mod_from_playset,
             commands::playsets::reorder_playset_entries,
+            commands::playsets::set_entries_lock_group,
             commands::playsets::set_active_playset,
             commands::playsets::apply_playset,
             commands::playsets::save_active_as_playset,

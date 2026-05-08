@@ -136,6 +136,23 @@ pub fn reorder_playset_entries(
 }
 
 #[tauri::command]
+pub fn set_entries_lock_group(
+    app_handle: tauri::AppHandle,
+    base_path: String,
+    playset_id: String,
+    mod_ids: Vec<String>,
+    lock_group: Option<String>,
+) -> Result<Playset, AppError> {
+    manager::set_entries_lock_group(
+        &app_handle,
+        &base_path,
+        &playset_id,
+        &mod_ids,
+        lock_group.as_deref(),
+    )
+}
+
+#[tauri::command]
 pub fn set_active_playset(
     app_handle: tauri::AppHandle,
     base_path: String,

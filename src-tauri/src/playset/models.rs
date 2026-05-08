@@ -32,6 +32,12 @@ pub struct Playset {
 /// playset is applied. `order` matches vector position after every write.
 /// `locked` pins the entry's absolute index during auto-reorder; older
 /// playset files without this field default to unlocked via serde.
+///
+/// `lock_group` ties multiple entries into a sticky cluster: entries sharing
+/// the same group id must remain contiguous in their current relative order
+/// during auto-reorder, but the cluster as a whole is free to move. `None`
+/// means the entry is not part of any group. Older playset files without
+/// this field default to `None` via serde.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PlaysetEntry {
     pub mod_id: String,
@@ -40,6 +46,8 @@ pub struct PlaysetEntry {
     pub order: u32,
     #[serde(default)]
     pub locked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock_group: Option<String>,
 }
 
 impl PlaysetEntry {

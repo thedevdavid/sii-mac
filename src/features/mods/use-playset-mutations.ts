@@ -22,6 +22,7 @@ import {
   removeModFromPlayset,
   renamePlayset,
   reorderPlaysetEntries,
+  setEntriesLockGroup,
   saveActiveAsPlayset,
   setActivePlayset,
   toggleEntryEnabled,
@@ -156,17 +157,46 @@ export function useDeletePlayset(
   basePath: GameBasePath | null | undefined,
   profilePath: ProfilePath | null | undefined,
 ) {
-  return useInvalidatingMutation<void, { playsetId: PlaysetId }>({
+  const queryClient = useQueryClient();
+  const lKey = listKey(basePath);
+  return useInvalidatingMutation<
+    void,
+    { playsetId: PlaysetId },
+    { previous: Playset[] | undefined }
+  >({
     mutationFn: ({ playsetId }) =>
       deletePlayset(basePath as GameBasePath, playsetId),
     invalidate: [
-      listKey(basePath),
       detailPrefix(basePath),
       activeKey(basePath, profilePath),
       driftPrefix(basePath, profilePath),
     ],
     successToast: () => "Playset deleted",
     errorPrefix: "Delete failed",
+    onMutate: async ({ playsetId }) => {
+      // Optimistically remove from the sidebar list so the row disappears the
+      // instant the user confirms. The server is authoritative; on error we
+      // restore the snapshot.
+      await queryClient.cancelQueries({ queryKey: lKey });
+      const previous = queryClient.getQueryData<Playset[]>(lKey);
+      if (previous) {
+        queryClient.setQueryData<Playset[]>(
+          lKey,
+          previous.filter((p) => p.id !== playsetId),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(lKey, context.previous);
+      }
+    },
+    onSuccess: () => {
+      // Reconcile with server state in case anything else changed (e.g.
+      // ensure_live_temp_playset side effects).
+      queryClient.invalidateQueries({ queryKey: lKey });
+    },
   });
 }
 
@@ -374,6 +404,7 @@ export function useAddModToPlayset(
           enabled: true,
           order: current.entries.length,
           locked: false,
+          lock_group: null,
         },
       ],
     }),
@@ -433,5 +464,42 @@ export function useReorderPlaysetEntries(
       return { ...current, entries: reordered };
     },
     errorPrefix: "Reorder failed",
+  });
+}
+
+export function useSetEntriesLockGroup(
+  basePath: GameBasePath | null | undefined,
+  profilePath: ProfilePath | null | undefined,
+) {
+  return useOptimisticPlaysetMutation<{
+    playsetId: PlaysetId;
+    modIds: ModId[];
+    lockGroup: string | null;
+  }>({
+    basePath,
+    profilePath,
+    mutationFn: ({ playsetId, modIds, lockGroup }) =>
+      setEntriesLockGroup(
+        basePath as GameBasePath,
+        playsetId,
+        modIds,
+        lockGroup,
+      ),
+    apply: (current, { modIds, lockGroup }) => {
+      const targets = new Set(modIds);
+      return {
+        ...current,
+        entries: current.entries.map((entry) =>
+          targets.has(entry.mod_id as ModId)
+            ? { ...entry, lock_group: lockGroup }
+            : entry,
+        ),
+      };
+    },
+    successToast: (_data, { lockGroup, modIds }) =>
+      lockGroup
+        ? `Grouped ${modIds.length} mod${modIds.length === 1 ? "" : "s"}`
+        : `Ungrouped ${modIds.length} mod${modIds.length === 1 ? "" : "s"}`,
+    errorPrefix: "Group change failed",
   });
 }

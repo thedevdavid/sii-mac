@@ -403,24 +403,64 @@ struct ManifestData {
     compatible_versions: Vec<String>,
 }
 
-/// Read manifest.sii from a directory.
+/// Read manifest.sii from a directory. Falls back to scanning `description.txt`
+/// + the directory name when the manifest has no `category[]` field, since the
+/// vast majority of community mods (especially older or hand-packed ones) ship
+/// without categories.
 fn read_manifest_from_dir(dir: &Path) -> Option<ManifestData> {
     let manifest_path = dir.join("manifest.sii");
     if !manifest_path.exists() {
         return None;
     }
     let text = fs::read_to_string(&manifest_path).ok()?;
-    parse_manifest(&text)
+    let mut data = parse_manifest(&text)?;
+    if data.categories.is_empty() {
+        let description = fs::read_to_string(dir.join("description.txt")).ok();
+        let dir_name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        data.categories = infer_categories(
+            description.as_deref(),
+            data.display_name.as_deref(),
+            dir_name,
+        );
+    }
+    Some(data)
 }
 
-/// Read manifest.sii from inside a .scs zip archive.
+/// Read manifest.sii from inside a .scs zip archive. Same description-based
+/// fallback as the directory variant.
 fn read_manifest_from_scs(scs_path: &Path) -> Option<ManifestData> {
     let file = fs::File::open(scs_path).ok()?;
     let mut archive = zip::ZipArchive::new(file).ok()?;
-    let mut entry = archive.by_name("manifest.sii").ok()?;
     let mut text = String::new();
-    entry.read_to_string(&mut text).ok()?;
-    parse_manifest(&text)
+    archive
+        .by_name("manifest.sii")
+        .ok()?
+        .read_to_string(&mut text)
+        .ok()?;
+    let mut data = parse_manifest(&text)?;
+    if data.categories.is_empty() {
+        let mut description = String::new();
+        if let Ok(mut entry) = archive.by_name("description.txt") {
+            let _ = entry.read_to_string(&mut description);
+        }
+        let file_stem = scs_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        data.categories = infer_categories(
+            if description.is_empty() {
+                None
+            } else {
+                Some(description.as_str())
+            },
+            data.display_name.as_deref(),
+            file_stem,
+        );
+    }
+    Some(data)
 }
 
 /// Parse manifest.sii text to extract mod metadata.
@@ -438,6 +478,59 @@ fn parse_manifest(text: &str) -> Option<ManifestData> {
         categories,
         compatible_versions,
     })
+}
+
+/// Heuristic category inference for mods whose `manifest.sii` has no
+/// `category[]` field. Scans `description.txt`, the display name, and the
+/// archive/dir name for keywords that map onto SCS's canonical category enum.
+///
+/// The output uses canonical SCS values (`paint_job`, `tuning_parts`, …) so
+/// the same downstream logic in `LOAD_ORDER_GROUPS.matchCategories` resolves
+/// inferred mods exactly the same as ones with manifest categories.
+///
+/// Keywords are ordered by specificity — the most distinctive markers come
+/// first so a description that mentions both "trailer" and "skin" classifies
+/// as a paint job rather than a trailer.
+fn infer_categories(description: Option<&str>, display_name: Option<&str>, name: &str) -> Vec<String> {
+    let mut text = String::with_capacity(2048);
+    if let Some(d) = description {
+        // Bound the text we scan — description.txt can be tens of KB and we
+        // only need broad-strokes keyword matching.
+        text.push_str(&d.chars().take(4096).collect::<String>());
+        text.push(' ');
+    }
+    if let Some(dn) = display_name {
+        text.push_str(dn);
+        text.push(' ');
+    }
+    text.push_str(name);
+    let lower = text.to_ascii_lowercase();
+
+    let rules: &[(&str, &[&str])] = &[
+        // Most distinctive first — a "paint job" overrides "trailer" because
+        // skins are bundled inside a trailer-shaped target.
+        ("paint_job", &["paint job", "paintjob", "paint-job", "skin pack", "skin for", "livery", "decals"]),
+        ("sound", &["sound fix", "sound pack", "engine sound", "exhaust sound", "audio pack"]),
+        ("ai_traffic", &["ai traffic", "traffic pack", "traffic density", "driver behavior", "real ai"]),
+        ("weather_setup", &["realistic weather", "brutal weather", "weather mod", "frosty winter", "climate"]),
+        ("graphics", &["reshade", "graphics mod", "post-processing", "lighting mod", "lightbox", "color grading"]),
+        ("tuning_parts", &["tuning pack", "wheel pack", "accessory pack", "lightbar", "interior accessor", "dashboard pack"]),
+        ("interior", &["interior mod", "cabin pack", "cabin accessor"]),
+        ("physics", &["realistic physics", "suspension mod", "transmission mod", "handling mod"]),
+        ("economy", &["economy mod", "realistic economy", "money mod"]),
+        ("ui", &["ui mod", "minimap mod", "adviser mod", "background image", "loading screen"]),
+        ("map", &["map mod", "map expansion", "promods", "rusmap", "reforma", "project balkans", "great steppe"]),
+        ("trailer", &["trailer pack", "ownable trailer", "cargo pack"]),
+        ("truck", &["truck pack", "truck mod"]),
+    ];
+
+    let mut hits: Vec<String> = Vec::new();
+    for (canonical, needles) in rules {
+        if needles.iter().any(|n| lower.contains(n)) {
+            hits.push((*canonical).to_string());
+        }
+    }
+    hits
 }
 
 #[cfg(test)]
@@ -493,6 +586,41 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("does_not_exist_appworkshop.acf");
         assert!(read_appworkshop_titles(&path).is_none());
+    }
+
+    #[test]
+    fn test_infer_categories_from_description_keywords() {
+        // Paint job — most distinctive marker beats "trailer skin" → paint_job.
+        let cats = infer_categories(
+            Some("This mod adds a custom paint job for the SCS Krone trailer."),
+            Some("Krone Livery Pack"),
+            "krone-livery-pack",
+        );
+        assert!(cats.contains(&"paint_job".to_string()), "got: {cats:?}");
+
+        // AI traffic mod from description.
+        let cats = infer_categories(
+            Some("Real AI traffic density rebalanced for ProMods."),
+            None,
+            "real-ai",
+        );
+        assert!(cats.contains(&"ai_traffic".to_string()));
+
+        // Weather mod.
+        let cats = infer_categories(
+            Some("Realistic Brutal Weather and Graphics overhaul."),
+            None,
+            "rbw-2024",
+        );
+        assert!(cats.contains(&"weather_setup".to_string()));
+
+        // Map mod via name match alone (no description).
+        let cats = infer_categories(None, None, "promods-canada");
+        assert!(cats.contains(&"map".to_string()));
+
+        // No keywords at all → empty (caller falls back to "other").
+        let cats = infer_categories(Some("Foo bar baz."), None, "");
+        assert!(cats.is_empty());
     }
 
     #[test]

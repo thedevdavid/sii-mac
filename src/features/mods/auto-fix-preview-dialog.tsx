@@ -10,6 +10,8 @@ import {
   AlertDialogTitle,
 } from "@/components/cupertino/alert-dialog";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
+import { Textarea } from "@/components/cupertino/textarea";
+import { Label } from "@/components/ui/label";
 import {
   IconAlertTriangle,
   IconArrowDown,
@@ -170,13 +172,13 @@ export function AutoFixPreviewDialog({
           {/* Left column — recipe input + diagnostics */}
           <div className="flex min-w-0 flex-col gap-2">
             <div className="space-y-1">
-              <label
-                className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+              <Label
                 htmlFor="auto-fix-hints"
+                className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
                 Recipe / hints
-              </label>
-              <textarea
+              </Label>
+              <Textarea
                 id="auto-fix-hints"
                 value={hintsText}
                 onChange={(e) => setHintsText(e.target.value)}
@@ -184,7 +186,7 @@ export function AutoFixPreviewDialog({
                 placeholder={
                   "e.g.\nProMods Canada\nRealistic Brutal Weather\nSCS Trailer Pack"
                 }
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                className="font-mono text-[11px]"
                 spellCheck={false}
               />
               <p className="text-[10px] text-muted-foreground">

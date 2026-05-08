@@ -36,7 +36,7 @@ export function ModLibraryRow({
         }
       }}
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-md border border-transparent p-2 text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "group flex cursor-pointer items-center gap-3 rounded-md border border-transparent p-2.5 text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         isInPlayset && "bg-primary/5 hover:bg-primary/10",
       )}
     >
@@ -56,10 +56,10 @@ export function ModLibraryRow({
           <img
             src={thumbnail}
             alt=""
-            className="h-9 w-16 rounded border border-border object-cover"
+            className="h-10 w-16 rounded border border-border object-cover"
           />
         ) : (
-          <div className="flex h-9 w-16 items-center justify-center rounded border border-border bg-muted">
+          <div className="flex h-10 w-16 items-center justify-center rounded border border-border bg-muted">
             {mod.source === "workshop" ? (
               <IconBrandSteam className="size-4 text-muted-foreground" />
             ) : (
@@ -71,12 +71,10 @@ export function ModLibraryRow({
 
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{displayTitle}</div>
-        <div className="flex gap-2 truncate text-[10px] text-muted-foreground">
-          {mod.author && <span>{mod.author}</span>}
-          {mod.version && <span>v{mod.version}</span>}
-          {mod.categories.length > 0 && (
-            <span className="truncate">{mod.categories.join(", ")}</span>
-          )}
+        <div className="truncate text-[10px] text-muted-foreground">
+          {[mod.author, mod.version && `v${mod.version}`]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       </div>
 
@@ -88,6 +86,7 @@ export function ModLibraryRow({
           e.stopPropagation();
           onViewDetails();
         }}
+        className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
       >
         <IconInfoCircle className="size-3.5" />
       </Button>

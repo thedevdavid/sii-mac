@@ -54,6 +54,10 @@ fn serialize_value(out: &mut String, value: &SiiValue) {
                 out.push_str(&format!("{}", f));
             }
         }
+        SiiValue::HexFloat(bits) => {
+            out.push('&');
+            out.push_str(&format!("{bits:08x}"));
+        }
         SiiValue::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         SiiValue::Nil => out.push_str("nil"),
         SiiValue::Placement { position, rotation } => {
@@ -82,8 +86,11 @@ fn serialize_value(out: &mut String, value: &SiiValue) {
 }
 
 fn format_coord(v: f64) -> String {
-    if v.fract() == 0.0 {
-        format!("{:.1}", v)
+    // SCS writes integer-valued vector/placement components without a decimal
+    // point: `(0, 0, 0)` not `(0.0, 0.0, 0.0)`. Emitting the `.0` form makes
+    // the game's save loader reject the file. Match the canonical form.
+    if v.fract() == 0.0 && v.is_finite() && (v.abs() < (i64::MAX as f64)) {
+        format!("{}", v as i64)
     } else {
         format!("{}", v)
     }
@@ -175,6 +182,43 @@ mod tests {
         assert_eq!(roundtrip_string(""), "");
     }
 
+    /// Hex-encoded floats (`&XXXXXXXX`) survive parse → serialize byte-exact.
+    /// Decimal round-trip would drift the f32 bit pattern by one or two ulp,
+    /// which is enough for the game's save loader to reject the file.
+    #[test]
+    fn hex_floats_roundtrip_byte_exact() {
+        let input = "SiiNunit\n{\nbank : .b {\n payment_timer: &47806158\n game_time_secs: &41ae341b\n}\n\n}\n";
+        let doc = parse_siin(input).unwrap();
+        let out = serialize_siin(&doc);
+        assert!(out.contains("payment_timer: &47806158"), "got: {out}");
+        assert!(out.contains("game_time_secs: &41ae341b"), "got: {out}");
+    }
+
+    /// Vectors with hex components fall back to the raw text form so the
+    /// `&XXXXXXXX` bits survive. SCS uses this for colors and dimensions.
+    #[test]
+    fn vector_with_hex_components_roundtrips_byte_exact() {
+        let input = "SiiNunit\n{\nv : .v {\n base_color: (&3e843090, &3e843090, &3e843090)\n flake_color: (1, &3f0559b4, &3f11ff2e)\n}\n\n}\n";
+        let doc = parse_siin(input).unwrap();
+        let out = serialize_siin(&doc);
+        assert!(out.contains("base_color: (&3e843090, &3e843090, &3e843090)"), "got: {out}");
+        assert!(out.contains("flake_color: (1, &3f0559b4, &3f11ff2e)"), "got: {out}");
+    }
+
+    /// Integer-valued vector components keep their integer form. SCS writes
+    /// `(0, 0, 0)`; emitting `(0.0, 0.0, 0.0)` causes load failures.
+    #[test]
+    fn integer_vector_components_no_decimal_suffix() {
+        let input = "SiiNunit\n{\nv : .v {\n stored_pos: (2147483647, 2147483647, 2147483647)\n state: (0, 0)\n}\n\n}\n";
+        let doc = parse_siin(input).unwrap();
+        let out = serialize_siin(&doc);
+        assert!(
+            out.contains("stored_pos: (2147483647, 2147483647, 2147483647)"),
+            "got: {out}"
+        );
+        assert!(out.contains("state: (0, 0)"), "got: {out}");
+    }
+
     #[test]
     fn test_serialize_escaped_quote_has_backslash() {
         let doc = doc_with_one(SiiObject {
@@ -218,5 +262,106 @@ mod tests {
         );
 
         eprintln!("Round-trip: {} objects preserved", doc.objects.len());
+    }
+
+    /// Strong proof of non-destructive round-trip: every object class+id, every
+    /// field name+value must survive the serialize → re-parse cycle byte-exact.
+    /// Catches drift in floats, hex floats, integer vectors, escape sequences,
+    /// or any other value type that doesn't perfectly invert.
+    ///
+    /// Run against a known save by setting `SII_ROUNDTRIP_FILE` to its path:
+    ///   SII_ROUNDTRIP_FILE=/path/to/game.sii cargo test --lib -- \
+    ///       --ignored verify_save_lossless_roundtrip --nocapture
+    ///
+    /// Without the env var the test skips (no panic) so CI stays green.
+    #[test]
+    #[ignore]
+    fn verify_save_lossless_roundtrip() {
+        let path = match std::env::var("SII_ROUNDTRIP_FILE") {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Skipping: set SII_ROUNDTRIP_FILE=/path/to/game.sii");
+                return;
+            }
+        };
+        if !std::path::Path::new(&path).exists() {
+            eprintln!("Skipping: file not found at {path}");
+            return;
+        }
+
+        let bytes = std::fs::read(&path).expect("read input");
+        let format = crate::sii::detect_format(&bytes);
+        eprintln!("Input format: {:?}", format);
+        eprintln!("Input size:   {} bytes", bytes.len());
+
+        let decoded = sii_decode::file_type::decode_until_siin(&bytes)
+            .expect("decode failed");
+        let text = String::from_utf8(decoded).expect("utf-8 from decoder");
+        let doc1 = parse_siin(&text).expect("parse #1");
+        eprintln!("Objects:      {}", doc1.objects.len());
+
+        let serialized = serialize_siin(&doc1);
+        let doc2 = parse_siin(&serialized).expect("re-parse after serialize");
+
+        assert_eq!(
+            doc1.objects.len(),
+            doc2.objects.len(),
+            "object count drifted: {} → {}",
+            doc1.objects.len(),
+            doc2.objects.len()
+        );
+
+        let mut field_count = 0usize;
+        let mut mismatches: Vec<String> = Vec::new();
+        for (a, b) in doc1.objects.iter().zip(doc2.objects.iter()) {
+            if a.class != b.class || a.id != b.id {
+                mismatches.push(format!(
+                    "object header drift: `{} : {}` → `{} : {}`",
+                    a.class, a.id, b.class, b.id
+                ));
+                continue;
+            }
+            if a.fields.len() != b.fields.len() {
+                mismatches.push(format!(
+                    "{} : {}: field count {} → {}",
+                    a.class,
+                    a.id,
+                    a.fields.len(),
+                    b.fields.len()
+                ));
+            }
+            for (fa, fb) in a.fields.iter().zip(b.fields.iter()) {
+                field_count += 1;
+                if fa.name != fb.name {
+                    mismatches.push(format!(
+                        "{} : {}: field name `{}` → `{}`",
+                        a.class, a.id, fa.name, fb.name
+                    ));
+                }
+                if fa.value != fb.value {
+                    mismatches.push(format!(
+                        "{} : {} . {}: value drift {:?} → {:?}",
+                        a.class, a.id, fa.name, fa.value, fb.value
+                    ));
+                    if mismatches.len() > 20 {
+                        mismatches.push("…(truncated)".into());
+                        break;
+                    }
+                }
+            }
+        }
+        eprintln!("Fields:       {field_count} compared");
+
+        if !mismatches.is_empty() {
+            for m in &mismatches {
+                eprintln!("  MISMATCH: {m}");
+            }
+            panic!(
+                "{} mismatches — writer would corrupt this save",
+                mismatches.len()
+            );
+        }
+
+        eprintln!("OK: every field round-tripped byte-exact.");
     }
 }

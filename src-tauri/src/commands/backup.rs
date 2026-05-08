@@ -365,6 +365,17 @@ fn detect_game_from_path(path: &str) -> &'static str {
     if lowered.contains("american truck simulator") {
         return "ats";
     }
+    // Steam Cloud paths like `/userdata/<userId>/<appId>/remote/profiles/...`
+    // carry the game identity as the AppID segment: ATS = 270880, ETS2 = 227300.
+    // Match the segment exactly so we don't falsely trigger on paths that just
+    // happen to contain those digits.
+    for segment in path.split(['/', '\\']) {
+        match segment {
+            "270880" => return "ats",
+            "227300" => return "ets2",
+            _ => {}
+        }
+    }
 
     crate::warn_fallback!(
         "detect_game_from_path: no game marker in `{path}` — defaulting to ats"
@@ -424,6 +435,24 @@ mod tests {
         assert_eq!(
             detect_game_from_path("/Users/x/Documents/American Truck Simulator/profiles/54"),
             "ats"
+        );
+    }
+
+    #[test]
+    fn test_detect_game_from_path_uses_steam_appid() {
+        // Steam Cloud / CrossOver bottle paths: the AppID segment is the
+        // authoritative game marker.
+        assert_eq!(
+            detect_game_from_path(
+                "/Users/x/Library/Application Support/CrossOver/Bottles/Steam/drive_c/Program Files (x86)/Steam/userdata/79367054/270880/remote/profiles/4A75"
+            ),
+            "ats"
+        );
+        assert_eq!(
+            detect_game_from_path(
+                "/home/u/.steam/steam/userdata/12345/227300/remote/profiles/4A75"
+            ),
+            "ets2"
         );
     }
 

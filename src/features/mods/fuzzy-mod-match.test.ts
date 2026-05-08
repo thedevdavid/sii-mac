@@ -19,6 +19,7 @@ function entry(id: string, name: string, locked = false): PlaysetEntry {
     enabled: true,
     order: 0,
     locked,
+    lock_group: null,
   };
 }
 

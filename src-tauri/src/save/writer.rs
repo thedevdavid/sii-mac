@@ -25,7 +25,7 @@ fn with_save_doc<F>(save_path: &str, f: F) -> Result<(), AppError>
 where
     F: FnOnce(&mut SiiDocument) -> Result<(), AppError>,
 {
-    let mut doc = read_save_document(save_path)?;
+    let (mut doc, _format) = read_save_document(save_path)?;
     f(&mut doc)?;
     write_save(save_path, &doc)
 }
@@ -163,7 +163,7 @@ pub fn update_truck(
 }
 
 pub fn update_all_trucks(save_path: &str, action: &BulkAction) -> Result<usize, AppError> {
-    let mut doc = read_save_document(save_path)?;
+    let (mut doc, _format) = read_save_document(save_path)?;
     let mut count = 0;
 
     for obj in &mut doc.objects {
@@ -213,7 +213,7 @@ pub fn update_trailer(
 }
 
 pub fn update_all_trailers(save_path: &str) -> Result<usize, AppError> {
-    let mut doc = read_save_document(save_path)?;
+    let (mut doc, _format) = read_save_document(save_path)?;
     let mut count = 0;
 
     for obj in &mut doc.objects {
@@ -242,7 +242,7 @@ pub fn update_garage(
 }
 
 pub fn unlock_all_garages(save_path: &str) -> Result<usize, AppError> {
-    let mut doc = read_save_document(save_path)?;
+    let (mut doc, _format) = read_save_document(save_path)?;
     let mut count = 0;
     let tiny_raw = GarageStatus::Tiny.to_raw();
     let not_owned_raw = GarageStatus::NotOwned.to_raw();

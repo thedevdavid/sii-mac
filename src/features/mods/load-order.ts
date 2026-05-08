@@ -26,12 +26,20 @@ import {
  *     UI grouping/filter metadata only. The engine does NOT use it for any
  *     priority resolution.
  *
- * So this module's ordering is a heuristic: it maps SCS's published 18-value
- * category enum to a community-consensus priority. The grouping/labels follow
- * "The Old Fart"'s 12-step convention (forum.scssoft.com/viewtopic.php?t=283517),
- * which is the most-cited non-fan reference and lines up with both ProMods'
- * official guide (promods.net/viewtopic.php?t=29618) and JBX Graphics' shipped
- * load-order PDF.
+ * Ordering follows the canonical Steam community guide
+ * (https://steamcommunity.com/sharedfiles/filedetails/?id=3147291492), which
+ * mirrors ProMods' official guide and JBX Graphics' shipped load-order PDF:
+ *
+ *   1. UI / Minimal Adviser
+ *   2. Sound Fixes & Specific Sound Mods
+ *   3. Tuning Parts & Cabin Accessories (Wheels, Cabin Packs, Interiors)
+ *   4. Skins / Paint Jobs
+ *   5. Truck Mods
+ *   6. Trailer Mods (incl. Cargo Packs)
+ *   7. AI Traffic
+ *   8. Graphics & Weather Mods
+ *   9. Economy / Physics
+ *  10. Maps  (lowest priority)
  *
  * SCS canonical 18-value category enum (manifest.sii `category[]`):
  *   truck, trailer, interior, tuning_parts, ai_traffic, sound, paint_job,
@@ -55,26 +63,37 @@ export interface LoadOrderGroup {
 
 export const LOAD_ORDER_GROUPS: readonly LoadOrderGroup[] = [
   {
-    id: "ai_traffic",
-    label: "AI / Traffic",
+    id: "ui",
+    label: "UI / Adviser",
     description:
-      "AI vehicle packs, traffic density, driver behavior — overrides the truck definitions AI traffic uses, so it must sit above any vehicle mod.",
+      "HUD, menu reskins, minimap, adviser, backgrounds. Highest priority — overrides everything below.",
     priority: 1,
-    matchCategories: ["ai_traffic", "ai", "traffic"],
+    matchCategories: [
+      "ui",
+      "adviser",
+      "advisor",
+      "minimap",
+      "menu",
+      "hud",
+      "background",
+      "backgrounds",
+      "skybox",
+      "horizon",
+    ],
   },
   {
-    id: "physics",
-    label: "Physics",
+    id: "sound",
+    label: "Sounds",
     description:
-      "Suspension, transmission, handling — system-wide overrides for any vehicle-bundled physics tweaks underneath.",
+      "Engine sound packs, sound fixes, environmental audio. Sit near the top so per-truck sound replacements take precedence over any truck mod's bundled audio.",
     priority: 2,
-    matchCategories: ["physics", "suspension", "handling"],
+    matchCategories: ["sound", "sounds", "audio"],
   },
   {
     id: "tuning_parts",
-    label: "Tuning parts",
+    label: "Tuning / Interiors",
     description:
-      "Wheels, lights, lightbars, accessory packs — modifications that need their target truck or trailer underneath them.",
+      "Wheels, lights, lightbars, accessory packs, cabin interiors — additions that customize the trucks below.",
     priority: 3,
     matchCategories: [
       "tuning_parts",
@@ -94,22 +113,16 @@ export const LOAD_ORDER_GROUPS: readonly LoadOrderGroup[] = [
       "wheel",
       "wheels",
       "lights",
+      "interior",
+      "interiors",
     ],
-  },
-  {
-    id: "interior",
-    label: "Interior",
-    description:
-      "Cabin interior mods — sit above trucks since they replace cab assets the truck mod ships.",
-    priority: 4,
-    matchCategories: ["interior", "interiors"],
   },
   {
     id: "paint_job",
     label: "Paint jobs / Skins",
     description:
       "Paintjobs, liveries, decals, skins — applied on top of the vehicle they target.",
-    priority: 5,
+    priority: 4,
     matchCategories: [
       "paint_job",
       "paint_jobs",
@@ -131,54 +144,63 @@ export const LOAD_ORDER_GROUPS: readonly LoadOrderGroup[] = [
     id: "truck",
     label: "Trucks",
     description: "Standalone truck definitions, truck packs, buses.",
-    priority: 6,
+    priority: 5,
     matchCategories: ["truck", "trucks", "vehicle", "bus", "buses"],
-  },
-  {
-    id: "cargo_pack",
-    label: "Cargo packs",
-    description:
-      "Cargo definitions — sit above trailers because cargo references trailer types.",
-    priority: 7,
-    matchCategories: ["cargo_pack", "cargo", "cargo_packs"],
   },
   {
     id: "trailer",
     label: "Trailers",
-    description: "Standalone trailer definitions and trailer packs.",
-    priority: 8,
-    matchCategories: ["trailer", "trailers"],
+    description:
+      "Standalone trailer definitions, trailer packs, and cargo packs that reference them.",
+    priority: 6,
+    matchCategories: [
+      "trailer",
+      "trailers",
+      "cargo_pack",
+      "cargo",
+      "cargo_packs",
+    ],
   },
   {
-    id: "graphics",
-    label: "Graphics",
+    id: "ai_traffic",
+    label: "AI / Traffic",
     description:
-      "Visual mods, lighting, post-processing — overrides per-vehicle FX shipped inside truck/trailer mods below.",
-    priority: 9,
+      "AI vehicle packs, traffic density, driver behavior. Below trucks/trailers so it can pick up your installed vehicles.",
+    priority: 7,
+    matchCategories: ["ai_traffic", "ai", "traffic"],
+  },
+  {
+    id: "graphics_weather",
+    label: "Graphics & Weather",
+    description:
+      "Visual mods, post-processing, weather, sky, climate — JBX, Realistic Brutal Weather, Frosty, ENB-likes.",
+    priority: 8,
     matchCategories: [
       "graphics",
       "graphic",
       "lighting",
-      "lights",
       "fx",
       "shader",
       "shaders",
       "visual",
+      "weather_setup",
+      "weather",
     ],
   },
   {
-    id: "weather_setup",
-    label: "Weather",
-    description: "Weather, sky, climate — JBX, Realistic Brutal Weather, Frosty.",
-    priority: 10,
-    matchCategories: ["weather_setup", "weather"],
+    id: "physics",
+    label: "Economy / Physics",
+    description:
+      "Suspension, transmission, handling, economy tweaks — global rules that apply on top of map content.",
+    priority: 9,
+    matchCategories: ["physics", "suspension", "handling", "economy"],
   },
   {
     id: "world_models",
     label: "World models",
     description:
       "Models, movers, walkers, prefabs — world assets that maps reference. Sit above maps so map mods can pick them up.",
-    priority: 11,
+    priority: 10,
     matchCategories: [
       "models",
       "model",
@@ -194,8 +216,8 @@ export const LOAD_ORDER_GROUPS: readonly LoadOrderGroup[] = [
     id: "map",
     label: "Maps",
     description:
-      "ProMods, RusMap, Reforma, Project regions — the base content layer. Add-on regional maps belong above their parent.",
-    priority: 12,
+      "ProMods, RusMap, Reforma, Project regions — the base content layer. Lowest priority; add-on regional maps belong above their parent.",
+    priority: 11,
     matchCategories: [
       "map",
       "maps",
@@ -211,26 +233,10 @@ export const LOAD_ORDER_GROUPS: readonly LoadOrderGroup[] = [
     ],
   },
   {
-    id: "sound",
-    label: "Sounds",
-    description:
-      "Engine sound packs, environmental audio. Mostly self-contained — community puts these low because they rarely conflict.",
-    priority: 13,
-    matchCategories: ["sound", "sounds", "audio"],
-  },
-  {
-    id: "ui",
-    label: "UI",
-    description:
-      "HUD, menu reskins, backgrounds — order-independent, lowest precedence.",
-    priority: 14,
-    matchCategories: ["ui", "background", "backgrounds", "skybox", "horizon"],
-  },
-  {
     id: "other",
     label: "Other",
     description: "Anything that doesn't match a more specific group.",
-    priority: 15,
+    priority: 12,
     matchCategories: ["other", "misc", "default", "defaults", "base", "core"],
   },
 ];
@@ -729,6 +735,53 @@ export interface ReorderPlan {
  *
  * Pure — does not mutate inputs.
  */
+/**
+ * Post-process a plannedOrder so members of each `lock_group` end up
+ * contiguous and in their original relative order, while non-grouped entries
+ * keep the order auto-fix produced.
+ *
+ * Locked-position entries take precedence: if any member of a group is also
+ * `locked`, the whole group is left where auto-fix put it — the lock stays
+ * authoritative for that run. The user can unlock the entry to let the group
+ * coalesce again.
+ */
+function applyLockGroups(
+  plannedOrder: readonly ModId[],
+  entries: readonly PlaysetEntry[],
+): ModId[] {
+  const groupOrder = new Map<string, ModId[]>();
+  const groupOf = new Map<ModId, string>();
+  const groupsWithLockedMember = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.lock_group) continue;
+    const group = entry.lock_group;
+    groupOf.set(entry.mod_id as ModId, group);
+    const list = groupOrder.get(group) ?? [];
+    list.push(entry.mod_id as ModId);
+    groupOrder.set(group, list);
+    if (entry.locked) groupsWithLockedMember.add(group);
+  }
+  if (groupOrder.size === 0) return [...plannedOrder];
+
+  const result: ModId[] = [];
+  const placed = new Set<string>();
+  for (const modId of plannedOrder) {
+    const group = groupOf.get(modId);
+    if (group === undefined || groupsWithLockedMember.has(group)) {
+      result.push(modId);
+      continue;
+    }
+    // First time we see any member of this group → emit the whole group in
+    // its original relative order. Subsequent members of the same group
+    // are dropped here; the group is now contiguous at this position.
+    if (placed.has(group)) continue;
+    placed.add(group);
+    const members = groupOrder.get(group);
+    if (members) result.push(...members);
+  }
+  return result;
+}
+
 export function analyzeAndReorder(
   entries: readonly PlaysetEntry[],
   modsById: ReadonlyMap<ModId, FullModInfo>,
@@ -783,7 +836,7 @@ export function analyzeAndReorder(
         result[i] = finalUnlocked[cursor++].mod_id;
       }
     }
-    return { plannedOrder: result, matched: null };
+    return { plannedOrder: applyLockGroups(result, entries), matched: null };
   }
 
   // Recipe mode — priority-banded interleaving.
@@ -828,7 +881,7 @@ export function analyzeAndReorder(
       result[i] = sortedUnlocked[cursor++].mod_id;
     }
   }
-  return { plannedOrder: result, matched };
+  return { plannedOrder: applyLockGroups(result, entries), matched };
 }
 
 export type { MatchedRecipe, RecipeMatch, UnmatchedRecipeLine };

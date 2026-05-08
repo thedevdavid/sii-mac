@@ -38,8 +38,14 @@ pub enum SiiValue {
     Token(std::string::String),
     /// Integer number: `42`, `-1`
     Integer(i64),
-    /// Float number: `0.75`, `&3f400000` (hex-encoded float)
+    /// Float number: `0.75`. Decimal-formatted floats are stored here.
     Float(f64),
+    /// IEEE-754 f32 bit pattern: `&3f400000`. SCS uses this hex form for any
+    /// float that needs byte-exact round-trip (game time, unfixable wear,
+    /// etc.). Storing the raw u32 keeps the original bytes through
+    /// parse → serialize, which the game's save loader requires for several
+    /// fields. Converted to/from `f64` via `f32::from_bits` only at access.
+    HexFloat(u32),
     /// Boolean: `true` / `false` (parsed from token context)
     Bool(bool),
     /// Nil/null value
@@ -155,6 +161,7 @@ impl SiiObject {
     pub fn get_float(&self, name: &str) -> Option<f64> {
         match self.get(name) {
             Some(SiiValue::Float(n)) => Some(*n),
+            Some(SiiValue::HexFloat(bits)) => Some(f32::from_bits(*bits) as f64),
             Some(SiiValue::Integer(n)) => Some(*n as f64),
             _ => None,
         }

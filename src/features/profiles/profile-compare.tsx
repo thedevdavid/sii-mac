@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useProfileDetail } from "@/hooks/use-profiles";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
@@ -275,10 +276,14 @@ export function ProfileCompare({
         {/* Profile selectors */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
           <div className="space-y-1">
-            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Label
+              htmlFor="profile-compare-a"
+              className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+            >
               Profile A
-            </label>
+            </Label>
             <NativeSelect
+              id="profile-compare-a"
               value={pathA}
               onChange={(e) => handleSelectA(e.target.value)}
               className="w-full"
@@ -291,10 +296,14 @@ export function ProfileCompare({
           <IconArrowsExchange className="mb-1 size-5 text-muted-foreground" />
 
           <div className="space-y-1">
-            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Label
+              htmlFor="profile-compare-b"
+              className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+            >
               Profile B
-            </label>
+            </Label>
             <NativeSelect
+              id="profile-compare-b"
               value={pathB}
               onChange={(e) => handleSelectB(e.target.value)}
               className="w-full"

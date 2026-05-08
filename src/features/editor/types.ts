@@ -140,6 +140,15 @@ export type DriverData = z.infer<typeof DriverDataSchema>;
 // Top-level save data (response of `get_save_data`)
 // ---------------------------------------------------------------------------
 
+export const SaveFileFormatSchema = z.enum([
+  "plaintext",
+  "encrypted",
+  "binaryBsii",
+  "obfuscated3nK",
+  "unknown",
+]);
+export type SaveFileFormat = z.infer<typeof SaveFileFormatSchema>;
+
 export const SaveDataSchema = z.object({
   economy: EconomyDataSchema,
   player: PlayerDataSchema,
@@ -148,6 +157,7 @@ export const SaveDataSchema = z.object({
   trailers: z.array(TrailerDataSchema),
   garages: z.array(GarageDataSchema),
   drivers: z.array(DriverDataSchema),
+  fileFormat: SaveFileFormatSchema,
 });
 export type SaveData = z.infer<typeof SaveDataSchema>;
 

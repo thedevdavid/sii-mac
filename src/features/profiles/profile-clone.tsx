@@ -523,27 +523,34 @@ function CloneForm({
                             markCustom();
                           }}
                         >
-                          {contents.active_mods.map((mod) => (
-                            <label
-                              key={mod.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
-                            >
-                              <span className="size-5" />
-                              <Checkbox
-                                checked={selectedMods.includes(mod.id)}
-                                onCheckedChange={() => {
-                                  form.setFieldValue(
-                                    "selectedMods",
-                                    toggleSingleItem(mod.id, selectedMods),
-                                  );
-                                  markCustom();
-                                }}
-                              />
-                              <span className="min-w-0 flex-1 truncate text-sm">
-                                {mod.display_name}
-                              </span>
-                            </label>
-                          ))}
+                          {contents.active_mods.map((mod) => {
+                            const checkboxId = `clone-mod-${mod.id}`;
+                            return (
+                              <div
+                                key={mod.id}
+                                className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+                              >
+                                <span className="size-5" />
+                                <Checkbox
+                                  id={checkboxId}
+                                  checked={selectedMods.includes(mod.id)}
+                                  onCheckedChange={() => {
+                                    form.setFieldValue(
+                                      "selectedMods",
+                                      toggleSingleItem(mod.id, selectedMods),
+                                    );
+                                    markCustom();
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={checkboxId}
+                                  className="min-w-0 flex-1 cursor-pointer truncate text-sm font-normal"
+                                >
+                                  {mod.display_name}
+                                </Label>
+                              </div>
+                            );
+                          })}
                         </GroupRow>
                       )}
 

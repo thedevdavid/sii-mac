@@ -534,6 +534,21 @@ export async function reorderPlaysetEntries(
   return validateWithSchema(PlaysetSchema, "reorder_playset_entries", raw);
 }
 
+export async function setEntriesLockGroup(
+  basePath: GameBasePath,
+  playsetId: PlaysetId,
+  modIds: ModId[],
+  lockGroup: string | null,
+): Promise<Playset> {
+  const raw = await invoke("set_entries_lock_group", {
+    basePath,
+    playsetId,
+    modIds,
+    lockGroup,
+  });
+  return validateWithSchema(PlaysetSchema, "set_entries_lock_group", raw);
+}
+
 export async function setActivePlayset(
   basePath: GameBasePath,
   profilePath: ProfilePath,

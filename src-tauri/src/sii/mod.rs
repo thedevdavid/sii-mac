@@ -14,6 +14,40 @@ pub fn decode_sii_file(data: &[u8]) -> Result<String, AppError> {
     String::from_utf8(decoded).map_err(|e| AppError::SiiDecode(e.to_string()))
 }
 
+/// On-disk format of an SII file, derived from its 4-byte magic header.
+///
+/// We can decode all of these into plaintext SIIN, but our writer only emits
+/// plaintext. Rewriting a binary save back as plaintext changes the on-disk
+/// format and the game refuses to load it (unless `g_save_format = 2` is set
+/// in `config.cfg`). Use [`detect_format`] before writing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SiiFileFormat {
+    /// Plaintext SiiNunit. Magic: `SiiN`.
+    Plaintext,
+    /// Encrypted ScsC container. Magic: `ScsC`.
+    Encrypted,
+    /// Binary BSII. Magic: `BSII`.
+    BinaryBsii,
+    /// 3nK obfuscated. Magic: `3nK\x01`.
+    Obfuscated3nK,
+    /// Unknown / too small.
+    Unknown,
+}
+
+/// Detect the on-disk format from the first 4 bytes.
+pub fn detect_format(data: &[u8]) -> SiiFileFormat {
+    if data.len() < 4 {
+        return SiiFileFormat::Unknown;
+    }
+    match &data[0..4] {
+        b"SiiN" => SiiFileFormat::Plaintext,
+        b"ScsC" => SiiFileFormat::Encrypted,
+        b"BSII" => SiiFileFormat::BinaryBsii,
+        b"3nK\x01" => SiiFileFormat::Obfuscated3nK,
+        _ => SiiFileFormat::Unknown,
+    }
+}
+
 /// Parse a single-object SIIN document and return the first object's string
 /// field value. Returns `None` if the parse fails, the document is empty, or
 /// the field is missing.

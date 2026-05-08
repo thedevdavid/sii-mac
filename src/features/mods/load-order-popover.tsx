@@ -29,7 +29,11 @@ export function LoadOrderPopover() {
       >
         <IconInfoCircle className="size-3.5" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 max-h-96 overflow-y-auto">
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        className="max-h-[28rem] w-[20rem] max-w-[calc(100vw-2rem)] overflow-y-auto"
+      >
         <PopoverHeader>
           <PopoverTitle>Recommended load order</PopoverTitle>
           <PopoverDescription>
