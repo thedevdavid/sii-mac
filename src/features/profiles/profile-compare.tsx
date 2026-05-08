@@ -10,7 +10,7 @@ import {
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@/components/cupertino/empty";
 import { IconArrowsExchange } from "@tabler/icons-react";
 import { calculateLevel } from "@/lib/level-calc";
 import { getBrandDisplayName } from "@/lib/truck-brands";

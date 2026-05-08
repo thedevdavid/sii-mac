@@ -39,7 +39,9 @@ pub fn load_cache(
     app_handle: &AppHandle,
 ) -> Result<HashMap<String, WorkshopMetadataCacheEntry>, AppError> {
     let store = app_handle.store(CACHE_FILE)?;
-    let raw = store.get(CACHE_KEY).unwrap_or_else(|| serde_json::json!({}));
+    let raw = store
+        .get(CACHE_KEY)
+        .unwrap_or_else(|| serde_json::json!({}));
     let mut cache: HashMap<String, WorkshopMetadataCacheEntry> =
         serde_json::from_value(raw).unwrap_or_default();
 

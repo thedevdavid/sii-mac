@@ -404,9 +404,9 @@ struct ManifestData {
 }
 
 /// Read manifest.sii from a directory. Falls back to scanning `description.txt`
-/// + the directory name when the manifest has no `category[]` field, since the
-/// vast majority of community mods (especially older or hand-packed ones) ship
-/// without categories.
+/// and the directory name when the manifest has no `category[]` field, since
+/// the vast majority of community mods (especially older or hand-packed ones)
+/// ship without categories.
 fn read_manifest_from_dir(dir: &Path) -> Option<ManifestData> {
     let manifest_path = dir.join("manifest.sii");
     if !manifest_path.exists() {
@@ -416,10 +416,7 @@ fn read_manifest_from_dir(dir: &Path) -> Option<ManifestData> {
     let mut data = parse_manifest(&text)?;
     if data.categories.is_empty() {
         let description = fs::read_to_string(dir.join("description.txt")).ok();
-        let dir_name = dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
+        let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         data.categories = infer_categories(
             description.as_deref(),
             data.display_name.as_deref(),
@@ -491,7 +488,11 @@ fn parse_manifest(text: &str) -> Option<ManifestData> {
 /// Keywords are ordered by specificity — the most distinctive markers come
 /// first so a description that mentions both "trailer" and "skin" classifies
 /// as a paint job rather than a trailer.
-fn infer_categories(description: Option<&str>, display_name: Option<&str>, name: &str) -> Vec<String> {
+fn infer_categories(
+    description: Option<&str>,
+    display_name: Option<&str>,
+    name: &str,
+) -> Vec<String> {
     let mut text = String::with_capacity(2048);
     if let Some(d) = description {
         // Bound the text we scan — description.txt can be tens of KB and we
@@ -509,18 +510,113 @@ fn infer_categories(description: Option<&str>, display_name: Option<&str>, name:
     let rules: &[(&str, &[&str])] = &[
         // Most distinctive first — a "paint job" overrides "trailer" because
         // skins are bundled inside a trailer-shaped target.
-        ("paint_job", &["paint job", "paintjob", "paint-job", "skin pack", "skin for", "livery", "decals"]),
-        ("sound", &["sound fix", "sound pack", "engine sound", "exhaust sound", "audio pack"]),
-        ("ai_traffic", &["ai traffic", "traffic pack", "traffic density", "driver behavior", "real ai"]),
-        ("weather_setup", &["realistic weather", "brutal weather", "weather mod", "frosty winter", "climate"]),
-        ("graphics", &["reshade", "graphics mod", "post-processing", "lighting mod", "lightbox", "color grading"]),
-        ("tuning_parts", &["tuning pack", "wheel pack", "accessory pack", "lightbar", "interior accessor", "dashboard pack"]),
-        ("interior", &["interior mod", "cabin pack", "cabin accessor"]),
-        ("physics", &["realistic physics", "suspension mod", "transmission mod", "handling mod"]),
-        ("economy", &["economy mod", "realistic economy", "money mod"]),
-        ("ui", &["ui mod", "minimap mod", "adviser mod", "background image", "loading screen"]),
-        ("map", &["map mod", "map expansion", "promods", "rusmap", "reforma", "project balkans", "great steppe"]),
-        ("trailer", &["trailer pack", "ownable trailer", "cargo pack"]),
+        (
+            "paint_job",
+            &[
+                "paint job",
+                "paintjob",
+                "paint-job",
+                "skin pack",
+                "skin for",
+                "livery",
+                "decals",
+            ],
+        ),
+        (
+            "sound",
+            &[
+                "sound fix",
+                "sound pack",
+                "engine sound",
+                "exhaust sound",
+                "audio pack",
+            ],
+        ),
+        (
+            "ai_traffic",
+            &[
+                "ai traffic",
+                "traffic pack",
+                "traffic density",
+                "driver behavior",
+                "real ai",
+            ],
+        ),
+        (
+            "weather_setup",
+            &[
+                "realistic weather",
+                "brutal weather",
+                "weather mod",
+                "frosty winter",
+                "climate",
+            ],
+        ),
+        (
+            "graphics",
+            &[
+                "reshade",
+                "graphics mod",
+                "post-processing",
+                "lighting mod",
+                "lightbox",
+                "color grading",
+            ],
+        ),
+        (
+            "tuning_parts",
+            &[
+                "tuning pack",
+                "wheel pack",
+                "accessory pack",
+                "lightbar",
+                "interior accessor",
+                "dashboard pack",
+            ],
+        ),
+        (
+            "interior",
+            &["interior mod", "cabin pack", "cabin accessor"],
+        ),
+        (
+            "physics",
+            &[
+                "realistic physics",
+                "suspension mod",
+                "transmission mod",
+                "handling mod",
+            ],
+        ),
+        (
+            "economy",
+            &["economy mod", "realistic economy", "money mod"],
+        ),
+        (
+            "ui",
+            &[
+                "ui mod",
+                "minimap mod",
+                "adviser mod",
+                "background image",
+                "loading screen",
+            ],
+        ),
+        (
+            "map",
+            &[
+                "map mod",
+                "map expansion",
+                "promods",
+                "rusmap",
+                "reforma",
+                "project balkans",
+                "great steppe",
+            ],
+        ),
+        (
+            "trailer",
+            &["trailer pack", "ownable trailer", "cargo pack"],
+        ),
         ("truck", &["truck pack", "truck mod"]),
     ];
 

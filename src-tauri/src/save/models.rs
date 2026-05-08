@@ -229,6 +229,10 @@ pub struct TruckChanges {
     pub transmission_wear: Option<i64>,
     pub cabin_wear: Option<i64>,
     pub chassis_wear: Option<i64>,
+    /// Single wear value applied uniformly to every `wheels_wear[i]` slot —
+    /// the SCS service screen tracks wheels alongside engine/transmission/etc,
+    /// so a "needs service" warning won't clear unless wheels are also fixed.
+    pub wheels_wear: Option<i64>,
     pub license_plate: Option<String>,
     /// Set all wear to 0
     pub repair: Option<bool>,

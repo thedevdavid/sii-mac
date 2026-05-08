@@ -127,6 +127,26 @@ fn parse_value(s: &str) -> SiiValue {
         return SiiValue::Integer(n);
     }
 
+    // u64 — for hashes (`company_check_hash` etc.) that overflow i64 but fit
+    // u64. Must be tried before f64 so we don't lose precision (f64 mantissa
+    // is 52 bits — integers ≥ 2^53 round to even multiples).
+    if let Ok(n) = s.parse::<u64>() {
+        return SiiValue::UInt(n);
+    }
+
+    // Recovery: a u64 written by an older buggy version of our serializer
+    // would have a `.0` suffix because the parser had fallen back to f64.
+    // The game's parser rejects `<bignum>.0` for these fields. Detect that
+    // shape and recover the original integer.
+    if let Some(stripped) = s.strip_suffix(".0") {
+        if let Ok(n) = stripped.parse::<u64>() {
+            return SiiValue::UInt(n);
+        }
+        if let Ok(n) = stripped.parse::<i64>() {
+            return SiiValue::Integer(n);
+        }
+    }
+
     // Float
     if let Ok(f) = s.parse::<f64>() {
         return SiiValue::Float(f);
@@ -143,7 +163,6 @@ fn parse_value(s: &str) -> SiiValue {
     // Token (reference, identifier, etc.)
     SiiValue::Token(s.to_string())
 }
-
 
 fn try_parse_placement(s: &str) -> Option<SiiValue> {
     // Hex-encoded components (`&3f800000`) need byte-exact round-trip; the

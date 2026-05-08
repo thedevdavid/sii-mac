@@ -36,7 +36,7 @@ export function ModLibraryRow({
         }
       }}
       className={cn(
-        "group flex cursor-pointer items-center gap-3 rounded-md border border-transparent p-2.5 text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "group flex items-center gap-3 rounded-md border border-transparent p-2.5 text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         isInPlayset && "bg-primary/5 hover:bg-primary/10",
       )}
     >

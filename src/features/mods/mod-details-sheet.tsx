@@ -24,6 +24,7 @@ import { deleteLocalMod } from "@/lib/tauri-commands";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { GameBasePath } from "@/lib/core-types";
+import { BBCode } from "@/lib/bbcode";
 import { formatSubscriberCount, formatVoteRatio } from "./workshop-metadata";
 import type { EnrichedMod } from "./workshop-metadata";
 
@@ -160,9 +161,7 @@ export function ModDetailsSheet({
                   </div>
                   {mod.workshop.description && (
                     <ScrollArea className="min-h-0 flex-1 pr-3">
-                      <div className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                        {mod.workshop.description}
-                      </div>
+                      <BBCode source={mod.workshop.description} />
                     </ScrollArea>
                   )}
                 </div>

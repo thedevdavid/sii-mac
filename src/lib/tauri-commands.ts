@@ -170,6 +170,35 @@ export async function listSaves(
   return validateWithSchema(z.array(SaveSummarySchema), "list_saves", raw);
 }
 
+const SaveBackupKindSchema = z.enum(["previous", "original"]);
+export type SaveBackupKind = z.infer<typeof SaveBackupKindSchema>;
+
+const SaveBackupInfoSchema = z.object({
+  kind: SaveBackupKindSchema,
+  path: z.string(),
+  modified_at: z.string().nullish(),
+  size_bytes: z.number(),
+});
+export type SaveBackupInfo = z.infer<typeof SaveBackupInfoSchema>;
+
+export async function listSaveBackups(
+  savePath: SavePath,
+): Promise<SaveBackupInfo[]> {
+  const raw = await invoke("list_save_backups", { savePath });
+  return validateWithSchema(
+    z.array(SaveBackupInfoSchema),
+    "list_save_backups",
+    raw,
+  );
+}
+
+export async function restoreSaveBackup(
+  savePath: SavePath,
+  kind: SaveBackupKind,
+): Promise<void> {
+  await invoke("restore_save_backup", { savePath, kind });
+}
+
 export async function backupProfile(
   profilePath: ProfilePath,
   backupDir: BackupPath | undefined,
@@ -192,15 +221,32 @@ export async function listBackups(
   return validateWithSchema(z.array(BackupInfoSchema), "list_backups", raw);
 }
 
+export async function deleteBackup(backupPath: BackupPath): Promise<void> {
+  await invoke("delete_backup", { backupPath });
+}
+
+export async function cleanupBackups(
+  keepPerProfile: number,
+  backupDir?: BackupPath,
+): Promise<number> {
+  const raw = await invoke("cleanup_backups", {
+    backupDir,
+    keepPerProfile,
+  });
+  return validateWithSchema(z.number(), "cleanup_backups", raw);
+}
+
 export async function restoreBackup(
   backupPath: BackupPath,
   profilesDir: ProfilesPath,
+  overwrite: boolean,
   jobId: JobId,
   progress: Channel<unknown>,
 ): Promise<string> {
   const raw = await invoke("restore_backup", {
     backupPath,
     profilesDir,
+    overwrite,
     jobId,
     progress,
   });

@@ -1,14 +1,5 @@
 import { useState } from "react";
 import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -31,8 +22,6 @@ import {
   usePlaysetDrift,
   useWorkshopMetadata,
 } from "./use-playsets";
-import { useReorderPlaysetEntries } from "./use-playset-mutations";
-import { parseDndId } from "./dnd-ids";
 import { extractWorkshopIds, type EnrichedMod } from "./workshop-metadata";
 
 interface ModManagerProps {
@@ -59,58 +48,17 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
     (installationMods ?? []).map((m) => [m.id, m]),
   );
 
-  const reorderMutation = useReorderPlaysetEntries(basePath, profilePath);
-
   const [detailsTarget, setDetailsTarget] = useState<EnrichedMod | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || !activePlayset) return;
-    const activeId = parseDndId(active.id as string);
-    const overId = parseDndId(over.id as string);
-    if (!activeId || !overId) return;
-    if (activeId.source !== "playset" || overId.source !== "playset") return;
-    if (activeId.modId === overId.modId) return;
-
-    // Locked entries pin their index — refuse drags involving them.
-    const fromEntry = activePlayset.entries.find(
-      (e) => e.mod_id === activeId.modId,
-    );
-    const toEntry = activePlayset.entries.find(
-      (e) => e.mod_id === overId.modId,
-    );
-    if (fromEntry?.locked || toEntry?.locked) return;
-
-    const current = activePlayset.entries.map((e) => e.mod_id);
-    const fromIdx = current.indexOf(activeId.modId);
-    const toIdx = current.indexOf(overId.modId);
-    if (fromIdx < 0 || toIdx < 0) return;
-
-    const reordered = [...current];
-    const [moved] = reordered.splice(fromIdx, 1);
-    reordered.splice(toIdx, 0, moved);
-
-    reorderMutation.mutate({
-      playsetId: activePlayset.id,
-      orderedModIds: reordered as typeof current,
-    });
-  };
 
   if (playsetLoading) {
     return <ModManagerSkeleton />;
   }
 
+  // Drag-and-drop state lives inside `<PlaysetEditor>` (reui Sortable manages
+  // its own DndContext + sensors). The library list isn't a drag source today,
+  // so there's nothing to wrap at this level.
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <>
       <ResizablePanelGroup orientation="horizontal" className="h-full">
         <ResizablePanel defaultSize="20" minSize="15" maxSize="30">
           <PlaysetSidebar
@@ -152,7 +100,7 @@ export function ModManager({ basePath, profilePath }: ModManagerProps) {
           if (!open) setDetailsTarget(null);
         }}
       />
-    </DndContext>
+    </>
   );
 }
 

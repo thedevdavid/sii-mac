@@ -11,7 +11,7 @@
 //! always reflects the freshly-written file.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -74,7 +74,7 @@ impl SaveCache {
     }
 }
 
-fn save_mtime(save_dir: &PathBuf) -> Result<SystemTime, AppError> {
+fn save_mtime(save_dir: &Path) -> Result<SystemTime, AppError> {
     let game_sii = save_dir.join("game.sii");
     let meta = std::fs::metadata(&game_sii)?;
     Ok(meta.modified()?)

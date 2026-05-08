@@ -7,7 +7,7 @@ import {
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@/components/cupertino/empty";
 import {
   Item,
   ItemGroup,

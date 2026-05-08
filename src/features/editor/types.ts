@@ -183,6 +183,7 @@ export const TruckChangesSchema = z.object({
   transmission_wear: z.number().int().min(0).max(WEAR_MAX).optional(),
   cabin_wear: z.number().int().min(0).max(WEAR_MAX).optional(),
   chassis_wear: z.number().int().min(0).max(WEAR_MAX).optional(),
+  wheels_wear: z.number().int().min(0).max(WEAR_MAX).optional(),
   license_plate: z.string().max(32).optional(),
   repair: z.boolean().optional(),
   refuel: z.boolean().optional(),

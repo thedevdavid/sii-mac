@@ -33,8 +33,13 @@ const TruckEditSchema = z.object({
   transmission_wear: z.number().min(0).max(100),
   cabin_wear: z.number().min(0).max(100),
   chassis_wear: z.number().min(0).max(100),
+  wheels_wear: z.number().min(0).max(100),
   license_plate: z.string().max(32),
 });
+
+function maxWheelWear(values: number[]): number {
+  return values.length > 0 ? Math.max(...values) : 0;
+}
 
 interface Props {
   truck: TruckData;
@@ -60,6 +65,7 @@ export function TruckDetailSheet({ truck, savePath, onClose, truckIdBrand }: Pro
       transmission_wear: wearPercent(truck.transmission_wear),
       cabin_wear: wearPercent(truck.cabin_wear),
       chassis_wear: wearPercent(truck.chassis_wear),
+      wheels_wear: wearPercent(maxWheelWear(truck.wheels_wear)),
       license_plate: truck.license_plate ?? "",
     },
     validators: { onSubmit: TruckEditSchema },
@@ -72,6 +78,7 @@ export function TruckDetailSheet({ truck, savePath, onClose, truckIdBrand }: Pro
           transmission_wear: percentToRaw(value.transmission_wear),
           cabin_wear: percentToRaw(value.cabin_wear),
           chassis_wear: percentToRaw(value.chassis_wear),
+          wheels_wear: percentToRaw(value.wheels_wear),
           license_plate: value.license_plate,
         },
       });
@@ -107,6 +114,7 @@ export function TruckDetailSheet({ truck, savePath, onClose, truckIdBrand }: Pro
               form.setFieldValue("transmission_wear", 0);
               form.setFieldValue("cabin_wear", 0);
               form.setFieldValue("chassis_wear", 0);
+              form.setFieldValue("wheels_wear", 0);
             }}
           >
             <IconTool className="size-3.5" />
@@ -170,6 +178,16 @@ export function TruckDetailSheet({ truck, savePath, onClose, truckIdBrand }: Pro
               label="Chassis Wear"
               value={v}
               onChange={(x) => form.setFieldValue("chassis_wear", x)}
+            />
+          )}
+        </form.Subscribe>
+
+        <form.Subscribe selector={(s) => s.values.wheels_wear}>
+          {(v) => (
+            <SliderRow
+              label="Wheels & Tires"
+              value={v}
+              onChange={(x) => form.setFieldValue("wheels_wear", x)}
             />
           )}
         </form.Subscribe>

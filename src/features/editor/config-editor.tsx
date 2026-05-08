@@ -15,11 +15,15 @@ import {
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
-import { IconAlertTriangle } from "@tabler/icons-react";
+} from "@/components/cupertino/empty";
+import { IconAlertTriangle, IconExternalLink } from "@tabler/icons-react";
 import { getGameConfig } from "@/lib/tauri-commands";
 import { useUpdateGameConfig } from "@/hooks/use-mutations";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Button } from "@/components/cupertino/button";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
+import { formatError } from "@/lib/format-error";
 import type { GameBasePath } from "@/lib/core-types";
 
 interface ConfigEditorProps {
@@ -125,7 +129,7 @@ export function ConfigEditor({ gameBasePath }: ConfigEditorProps) {
               <ItemContent>
                 <ItemTitle>Save Format</ItemTitle>
                 <ItemDescription>
-                  Plaintext saves are editable with text editors. Binary saves are smaller but encrypted.
+                  Controls the format the game writes saves in. Encrypted is the game default. Plaintext is human-readable. Editing a save here always writes plaintext, but the game re-encrypts on its next save.
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -138,11 +142,37 @@ export function ConfigEditor({ gameBasePath }: ConfigEditorProps) {
                     })
                   }
                   disabled={mutation.isPending}
-                  className="w-40"
+                  className="w-44"
                 >
-                  <option value="0">Binary (Default)</option>
+                  <option value="0">Encrypted (Default)</option>
                   <option value="2">Plaintext</option>
                 </NativeSelect>
+              </ItemActions>
+            </Item>
+
+            <Item variant="outline">
+              <ItemContent>
+                <ItemTitle>Open config.cfg</ItemTitle>
+                <ItemDescription>
+                  Opens the file in your system's default editor for advanced
+                  settings not exposed here.
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await openPath(config.config_path);
+                    } catch (err) {
+                      toast.error(`Could not open config.cfg: ${formatError(err)}`);
+                    }
+                  }}
+                >
+                  <IconExternalLink className="size-3.5" />
+                  Open
+                </Button>
               </ItemActions>
             </Item>
           </ItemGroup>

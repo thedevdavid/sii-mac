@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { Sortable } from "@/components/reui/sortable";
 import { toast } from "sonner";
 import { Button } from "@/components/cupertino/button";
 import { ScrollArea } from "@/components/cupertino/scroll-area";
@@ -25,11 +22,11 @@ import { ApplyPlaysetConfirmation } from "./apply-playset-confirmation";
 import { AutoFixPreviewDialog } from "./auto-fix-preview-dialog";
 import { LoadOrderPopover } from "./load-order-popover";
 import { SaveAsDialog } from "./save-as-dialog";
-import { playsetDndId } from "./dnd-ids";
 import { analyzeAndReorder, reorderIsNoOp } from "./load-order";
 import { useAutoFixMode } from "@/hooks/use-autofix-mode";
 import { playsetActionHelp } from "./playset-actions-help";
 import {
+  useAcceptPlaysetDrift,
   useApplyPlayset,
   useReorderPlaysetEntries,
   useRemoveModFromPlayset,
@@ -59,6 +56,7 @@ export function PlaysetEditor({
   drift,
 }: PlaysetEditorProps) {
   const applyMutation = useApplyPlayset(basePath, profilePath);
+  const acceptDriftMutation = useAcceptPlaysetDrift(basePath, profilePath);
   const reorderMutation = useReorderPlaysetEntries(basePath, profilePath);
   const removeMutation = useRemoveModFromPlayset(basePath, profilePath);
   const toggleMutation = useToggleEntryEnabled(basePath, profilePath);
@@ -296,7 +294,23 @@ export function PlaysetEditor({
           </div>
         </div>
 
-        {drift?.has_drift && <DriftBanner drift={drift} />}
+        {drift?.has_drift && (
+          <DriftBanner
+            drift={drift}
+            isBusy={
+              applyMutation.isPending || acceptDriftMutation.isPending
+            }
+            onApplyToProfile={() =>
+              applyMutation.mutate({
+                playsetId: playset.id,
+                playsetName: playset.name,
+              })
+            }
+            onUpdatePlaysetFromProfile={() =>
+              acceptDriftMutation.mutate({ playsetId: playset.id })
+            }
+          />
+        )}
 
         {selectedIds.size > 0 && (
           <PlaysetSelectionToolbar
@@ -366,9 +380,26 @@ export function PlaysetEditor({
               </div>
             )
           ) : (
-            <SortableContext
-              items={playset.entries.map((e) => playsetDndId(e.mod_id))}
-              strategy={verticalListSortingStrategy}
+            <Sortable
+              value={playset.entries}
+              getItemValue={(e) => e.mod_id}
+              onValueChange={(reordered) => {
+                // Refuse if the move would touch a locked entry — `disabled`
+                // on SortableItem already blocks the drag UI, but assert here
+                // for keyboard / programmatic callers too.
+                const before = playset.entries.map((e) => e.mod_id);
+                const after = reordered.map((e) => e.mod_id);
+                if (before.length !== after.length) return;
+                const lockedIndexShifted = playset.entries.some(
+                  (e, i) => e.locked && before[i] !== after[i],
+                );
+                if (lockedIndexShifted) return;
+                reorderMutation.mutate({
+                  playsetId: playset.id,
+                  orderedModIds: after as ModId[],
+                });
+              }}
+              className="contents"
             >
               {playset.entries.map((entry, index) => (
                 <PlaysetEntryRow
@@ -413,7 +444,7 @@ export function PlaysetEditor({
                   }
                 />
               ))}
-            </SortableContext>
+            </Sortable>
           )}
         </div>
       </ScrollArea>

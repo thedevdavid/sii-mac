@@ -4,7 +4,7 @@ import {
   EmptyHeader,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@/components/cupertino/empty";
 import { IconHandClick } from "@tabler/icons-react";
 
 export function NoProfileSelected() {

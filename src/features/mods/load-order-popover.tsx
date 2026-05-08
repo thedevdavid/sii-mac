@@ -1,23 +1,25 @@
 import { IconInfoCircle } from "@tabler/icons-react";
 import { Button } from "@/components/cupertino/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/cupertino/dialog";
 import { LOAD_ORDER_GROUPS } from "./load-order";
 
 /**
- * Discoverable info button + popover that explains the load-order convention
- * used by Auto-fix. Triggered from the playset editor header.
+ * Discoverable info button + dialog that explains the load-order convention
+ * used by Auto-fix. Triggered from the playset editor header. A dialog (rather
+ * than a popover) keeps the long ordered list scannable on small viewports
+ * where a popover would clip against the window edge.
  */
 export function LoadOrderPopover() {
   return (
-    <Popover>
-      <PopoverTrigger
+    <Dialog>
+      <DialogTrigger
         render={
           <Button
             variant="ghost"
@@ -28,21 +30,17 @@ export function LoadOrderPopover() {
         }
       >
         <IconInfoCircle className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={8}
-        className="max-h-[28rem] w-[20rem] max-w-[calc(100vw-2rem)] overflow-y-auto"
-      >
-        <PopoverHeader>
-          <PopoverTitle>Recommended load order</PopoverTitle>
-          <PopoverDescription>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Recommended load order</DialogTitle>
+          <DialogDescription>
             SCS publishes no official ordering — this follows community
-            convention. Top entries override anything below; place mods
-            you want winning conflicts higher.
-          </PopoverDescription>
-        </PopoverHeader>
-        <ol className="space-y-1 text-[11px]">
+            convention. Top entries override anything below; place mods you
+            want winning conflicts higher.
+          </DialogDescription>
+        </DialogHeader>
+        <ol className="max-h-[60vh] space-y-1 overflow-y-auto text-[11px]">
           {LOAD_ORDER_GROUPS.map((group, i) => (
             <li
               key={group.id}
@@ -58,7 +56,7 @@ export function LoadOrderPopover() {
             </li>
           ))}
         </ol>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }

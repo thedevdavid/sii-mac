@@ -116,6 +116,13 @@ where
 }
 
 /// Extract the ordered list of active mods from a parsed profile object.
+///
+/// **Order convention.** SCS stores `active_mods[]` such that the highest
+/// index has the highest priority — i.e. `active_mods[N-1]` is what the
+/// in-game Mod Manager UI shows at the **top** of the list. We invert that
+/// here so the returned `Vec` is in display order (top of UI = first entry,
+/// matching how playsets are shown in the editor and how the user thinks
+/// about priority). Confirmed against SCS forum docs and `truck-tools`.
 fn read_active_mods(obj: &SiiObject) -> Vec<ModEntry> {
     let prefix = "active_mods[";
     let mut entries: Vec<(usize, ModEntry)> = obj
@@ -139,15 +146,23 @@ fn read_active_mods(obj: &SiiObject) -> Vec<ModEntry> {
         })
         .collect();
 
-    entries.sort_by_key(|(idx, _)| *idx);
+    // Sort descending by index so the highest priority (= top of UI = last
+    // index in profile.sii) is first in the returned Vec.
+    entries.sort_by_key(|(idx, _)| std::cmp::Reverse(*idx));
     entries.into_iter().map(|(_, m)| m).collect()
 }
 
 /// Replace all `active_mods*` fields in `obj` with the given list, preserving
 /// the original position of the active_mods block within the object.
+///
+/// **Order convention.** `mods` is in display order — first entry is the
+/// top of the in-game UI (highest priority). SCS stores it inverted: the
+/// last index in `active_mods[]` is the highest priority. We reverse here so
+/// the output matches the game's expected priority ordering.
 fn write_active_mods(obj: &mut SiiObject, mods: &[ModEntry]) {
     let values = mods
         .iter()
+        .rev()
         .map(|m| SiiValue::String(format!("{}|{}", m.id, m.display_name)))
         .collect();
     obj.replace_indexed_array("active_mods", values);
@@ -172,20 +187,28 @@ profile_save : .profile {
     }
 
     #[test]
-    fn test_read_active_mods_parses_id_and_name() {
+    fn test_read_active_mods_returns_display_order() {
+        // sample_obj has active_mods[0]="mod_a", active_mods[1]="mod_b".
+        // SCS convention: active_mods[N-1] is the top of the in-game UI
+        // (highest priority). Our reader returns display order — top of
+        // UI first — so mod_b comes before mod_a.
         let obj = sample_obj();
         let mods = read_active_mods(&obj);
         assert_eq!(mods.len(), 2);
-        assert_eq!(mods[0].id, "mod_a");
-        assert_eq!(mods[0].display_name, "Mod A");
-        assert_eq!(mods[1].id, "mod_b");
-        assert_eq!(mods[1].display_name, "Mod B");
+        assert_eq!(mods[0].id, "mod_b");
+        assert_eq!(mods[0].display_name, "Mod B");
+        assert_eq!(mods[1].id, "mod_a");
+        assert_eq!(mods[1].display_name, "Mod A");
     }
 
     #[test]
-    fn test_write_active_mods_adds_new_entry() {
+    fn test_write_round_trip_preserves_display_order() {
+        // Round-trip via on-disk format: read display-order, append, write
+        // (which re-inverts to disk order), read display-order again.
         let mut obj = sample_obj();
         let mut mods = read_active_mods(&obj);
+        // Display order at this point: [mod_b, mod_a]. Push mod_c onto the
+        // BOTTOM of the UI list (lowest priority).
         mods.push(ModEntry {
             id: "mod_c".into(),
             display_name: "Mod C".into(),
@@ -194,7 +217,21 @@ profile_save : .profile {
 
         let written = read_active_mods(&obj);
         assert_eq!(written.len(), 3);
+        // After round-trip the display order is preserved end-to-end.
+        assert_eq!(written[0].id, "mod_b");
+        assert_eq!(written[1].id, "mod_a");
         assert_eq!(written[2].id, "mod_c");
+
+        // On-disk active_mods[0] must be the LAST display entry (mod_c).
+        let on_disk_zero = obj
+            .fields
+            .iter()
+            .find(|f| f.name == "active_mods[0]")
+            .and_then(|f| match &f.value {
+                SiiValue::String(s) => Some(s.as_str()),
+                _ => None,
+            });
+        assert_eq!(on_disk_zero, Some("mod_c|Mod C"));
 
         // Count field should be updated
         let count = obj

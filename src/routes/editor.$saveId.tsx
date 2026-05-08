@@ -7,9 +7,10 @@ import {
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@/components/cupertino/empty";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { EditorTabsNav } from "@/features/editor/editor-tabs-nav";
+import { SaveRestoreDialog } from "@/features/editor/save-restore-dialog";
 import { useSavePath } from "@/features/editor/use-save-path";
 import { useSaveData } from "@/hooks/use-save";
 import { useProfileState } from "@/lib/profile-context";
@@ -32,14 +33,17 @@ function EditorLayout() {
   return (
     <ScrollArea className="h-full">
       <div className="space-y-5 p-5">
-        <header className="flex items-baseline gap-2">
-          <h2 className="text-sm font-semibold">{prettifySaveDir(saveId)}</h2>
-          {data && (
-            <span className="text-xs text-muted-foreground">
-              ${data.bank.money_account.toLocaleString()} &middot;{" "}
-              {data.trucks.length} trucks &middot; {data.trailers.length} trailers
-            </span>
-          )}
+        <header className="flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-semibold">{prettifySaveDir(saveId)}</h2>
+            {data && (
+              <span className="text-xs text-muted-foreground">
+                ${data.bank.money_account.toLocaleString()} &middot;{" "}
+                {data.trucks.length} trucks &middot; {data.trailers.length} trailers
+              </span>
+            )}
+          </div>
+          {savePath && <SaveRestoreDialog savePath={savePath} />}
         </header>
 
         <EditorTabsNav />

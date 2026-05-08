@@ -61,7 +61,7 @@ export function DataTableFacetedFilter({
           {options.map((option) => (
             <label
               key={option.value}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-muted"
+              className="flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-muted"
             >
               <Checkbox
                 checked={selected.has(option.value)}

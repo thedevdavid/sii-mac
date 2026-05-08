@@ -1,5 +1,3 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/cupertino/button";
 import { Checkbox } from "@/components/cupertino/checkbox";
@@ -22,7 +20,7 @@ import {
   IconLockOpen,
   IconTrash,
 } from "@tabler/icons-react";
-import { playsetDndId } from "./dnd-ids";
+import { SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import type { PlaysetEntry } from "./types";
 
 /**
@@ -74,56 +72,47 @@ export function PlaysetEntryRow({
   onToggleSelected,
 }: PlaysetEntryRowProps) {
   const title = displayName ?? entry.display_name;
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: playsetDndId(entry.mod_id) });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   const isFirst = index === 0;
   const isLast = index === total - 1;
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
+    <SortableItem
+      value={entry.mod_id}
+      disabled={entry.locked}
       data-locked={entry.locked || undefined}
       data-selected={isSelected || undefined}
       className={cn(
-        "group flex items-center gap-2 rounded-md border border-transparent bg-background p-2 text-xs",
+        "group flex items-center gap-2 rounded-md border border-transparent bg-background p-2 text-xs transition-shadow",
         !entry.enabled && "opacity-50",
         isMissing && "border-destructive/40 bg-destructive/5",
         entry.locked && "border-amber-500/40 bg-amber-500/5",
         isSelected && "border-primary/40 bg-primary/5",
-        isDragging && "z-10 border-primary shadow-md",
       )}
     >
-      <button
-        type="button"
-        className={cn(
-          "touch-none text-muted-foreground",
-          entry.locked
-            ? "cursor-not-allowed opacity-40"
-            : "cursor-grab active:cursor-grabbing",
-        )}
-        aria-label={
-          entry.locked
-            ? `${title} is locked — unlock to drag`
-            : `Drag to reorder ${title}`
+      <SortableItemHandle
+        cursor={false}
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={entry.locked}
+            aria-label={
+              entry.locked
+                ? `${title} is locked — unlock to drag`
+                : `Drag to reorder ${title}`
+            }
+            className={cn(
+              "size-7 touch-none",
+              entry.locked
+                ? "cursor-not-allowed opacity-40"
+                : "cursor-grab active:cursor-grabbing",
+            )}
+          />
         }
-        {...(entry.locked ? {} : attributes)}
-        {...(entry.locked ? {} : listeners)}
       >
         <IconGripVertical className="size-3.5" />
-      </button>
+      </SortableItemHandle>
 
       <Checkbox
         checked={isSelected}
@@ -239,6 +228,6 @@ export function PlaysetEntryRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </SortableItem>
   );
 }

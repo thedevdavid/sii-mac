@@ -8,6 +8,7 @@ import { IconTool, IconStar } from "@tabler/icons-react";
 import { useUpdateTrailer, useRepairAllTrailers } from "@/hooks/use-mutations";
 import type { TrailerData } from "@/features/editor/types";
 import type { SavePath, TrailerId } from "@/lib/core-types";
+import { parseLicensePlate } from "@/lib/license-plate";
 
 const col = createColumnHelper<TrailerData>();
 
@@ -65,9 +66,22 @@ function buildColumns(
     }),
     col.accessor("license_plate", {
       header: "Plate",
-      cell: ({ getValue }) => (
-        <span className="text-muted-foreground">{getValue() || "—"}</span>
-      ),
+      cell: ({ getValue }) => {
+        const parsed = parseLicensePlate(getValue());
+        if (!parsed?.text) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="font-mono text-foreground">{parsed.text}</span>
+            {parsed.state && (
+              <span className="text-[10px] uppercase tracking-wide">
+                {parsed.state}
+              </span>
+            )}
+          </span>
+        );
+      },
     }),
     col.display({
       id: "actions",

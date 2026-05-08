@@ -26,11 +26,7 @@ use super::store::{load_installation, save_installation};
 
 static PLAYSET_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-fn with_installation<F, R>(
-    app_handle: &AppHandle,
-    base_path: &str,
-    f: F,
-) -> Result<R, AppError>
+fn with_installation<F, R>(app_handle: &AppHandle, base_path: &str, f: F) -> Result<R, AppError>
 where
     F: FnOnce(&mut InstallationPlaysets) -> Result<R, AppError>,
 {
@@ -46,11 +42,7 @@ where
 /// Read-only variant of `with_installation`. Loads from the cache (or disk on
 /// first hit) and runs the closure without writing back. Use for any command
 /// that only reads.
-fn with_installation_ro<F, R>(
-    app_handle: &AppHandle,
-    base_path: &str,
-    f: F,
-) -> Result<R, AppError>
+fn with_installation_ro<F, R>(app_handle: &AppHandle, base_path: &str, f: F) -> Result<R, AppError>
 where
     F: FnOnce(&InstallationPlaysets) -> Result<R, AppError>,
 {
@@ -225,7 +217,10 @@ pub fn entries_to_mod_entries(entries: &[PlaysetEntry]) -> Vec<ModEntry> {
 }
 
 /// Apply a metadata patch in place.
-pub fn apply_metadata_patch(playset: &mut Playset, patch: PlaysetMetadataPatch) -> Result<(), AppError> {
+pub fn apply_metadata_patch(
+    playset: &mut Playset,
+    patch: PlaysetMetadataPatch,
+) -> Result<(), AppError> {
     if let Some(name) = patch.name {
         validate_playset_name(&name)?;
         playset.name = name.trim().to_string();
@@ -275,10 +270,7 @@ pub fn reorder_entries(
 
 // --- Public API (takes AppHandle) ---
 
-pub fn list_playsets(
-    app_handle: &AppHandle,
-    base_path: &str,
-) -> Result<Vec<Playset>, AppError> {
+pub fn list_playsets(app_handle: &AppHandle, base_path: &str) -> Result<Vec<Playset>, AppError> {
     with_installation_ro(app_handle, base_path, |inst| Ok(inst.playsets.clone()))
 }
 
@@ -411,9 +403,7 @@ pub fn toggle_entry_enabled(
             .entries
             .iter_mut()
             .find(|e| e.mod_id == mod_id)
-            .ok_or_else(|| {
-                AppError::PlaysetInvalid(format!("mod_id '{mod_id}' not in playset"))
-            })?;
+            .ok_or_else(|| AppError::PlaysetInvalid(format!("mod_id '{mod_id}' not in playset")))?;
         entry.enabled = enabled;
         playset.updated_at = now_rfc3339();
         Ok(playset.clone())
@@ -435,9 +425,7 @@ pub fn toggle_entry_locked(
             .entries
             .iter_mut()
             .find(|e| e.mod_id == mod_id)
-            .ok_or_else(|| {
-                AppError::PlaysetInvalid(format!("mod_id '{mod_id}' not in playset"))
-            })?;
+            .ok_or_else(|| AppError::PlaysetInvalid(format!("mod_id '{mod_id}' not in playset")))?;
         entry.locked = locked;
         playset.updated_at = now_rfc3339();
         Ok(playset.clone())
@@ -627,9 +615,8 @@ pub fn get_active_playset(
         state.last_applied_at = Some(now_rfc3339());
         state.last_applied_snapshot = snapshot;
 
-        inst.find_playset(&active_id)
-            .cloned()
-            .ok_or_else(|| AppError::PlaysetNotFound(active_id))
+        let found = inst.find_playset(&active_id).cloned();
+        found.ok_or(AppError::PlaysetNotFound(active_id))
     })
 }
 
@@ -1046,5 +1033,4 @@ mod tests {
             entries: vec![],
         }
     }
-
 }

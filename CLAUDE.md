@@ -8,12 +8,12 @@ Features: game detection (macOS/Windows/Linux/CrossOver/Steam Cloud), profile vi
 
 ## Commands
 
-- `npm run tauri dev` — Full app (Vite + Rust)
-- `npm run tauri build` — Production build
-- `npm run dev` — Vite dev server only
-- `npm run build` — TypeScript check + Vite build
+- `bun tauri dev` — Full app (Vite + Rust)
+- `bun tauri build` — Production build
+- `bun dev` — Vite dev server only
+- `bun run build` — TypeScript check + Vite build
 - `cd src-tauri && cargo check` — Check Rust
-- `cd src-tauri && cargo test --lib` — Run Rust tests (72 pass, 3 ignored)
+- `cd src-tauri && cargo test --lib` — Run Rust tests
 
 ## Architecture
 
@@ -34,6 +34,18 @@ Features: game detection (macOS/Windows/Linux/CrossOver/Steam Cloud), profile vi
 - **Query**: Centralized key factory (`src/lib/query-keys.ts`). Mutation hooks (`src/hooks/use-mutations.ts`) with automatic invalidation.
 - **Components**: `cupertino/` (macOS-styled wrappers) + `ui/` (shadcn/Base UI components). DataTable + DataTableToolbar + DataTableFacetedFilter for data grids.
 - **Features**: `src/features/editor/` (save editor tabs), `src/features/profiles/` (overview, saves, mods, clone, compare, backups)
+
+### Save format strategy
+
+ATS/ETS2 stores `game.sii` in one of four formats: plaintext SiiNunit, encrypted ScsC (AES-256-CBC + zlib + HMAC), binary BSII, or obfuscated 3nK (XOR). Our reader (`src-tauri/src/sii/mod.rs::detect_format` + `decode_sii_file`) accepts all four.
+
+**Our writer always emits plaintext SiiN, regardless of source format.** This is deliberate and matches the working reference editor `CoffeSiberian/truck-tools` (Tauri+Rust+React, same stack). ATS accepts plaintext on load (`g_save_format=2` in `config.cfg` makes the game itself emit plaintext) and re-encrypts back to the user's configured native format on its next in-game save. The temporary on-disk size jump (e.g. 530 KB ScsC → 6 MB SiiN) lasts only until the game's next autosave.
+
+We do not ship a ScsC encryptor or a BSII writer. Neither does any public Rust crate today (`sii-decode-rs`, `decrypt_truck`, and `TheLazyTomcat/SII_Decrypt` are all decode-only). ScsC re-encryption is buildable but non-trivial (public AES key + HMAC + zlib pipeline); BSII has no public spec. Plaintext output sidesteps both.
+
+**`info.sii` is never touched.** The game owns it and rewrites it atomically alongside `game.sii` on its next save. `truck-tools` follows the same rule. Our writer (`src-tauri/src/save/writer.rs::write_save`) only writes `game.sii` and the rotating `.bak` / sticky `.bak.original` (see `crate::utils::atomic_replace_verified`).
+
+A non-ignored regression test (`test_writer_always_emits_plaintext_siin_and_does_not_touch_info_sii` in `save/writer.rs`) locks in both invariants — output begins with `SiiNunit` magic, info.sii bytes + mtime are unchanged.
 
 ### Key Patterns
 

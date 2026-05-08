@@ -373,13 +373,8 @@ mod tests {
         fs::write(src.join("a.txt"), b"A").unwrap();
 
         let dst = tmp.path().join("dst");
-        let err = copy_dir_with_progress(
-            &src,
-            &dst,
-            &mut |_| {},
-            &|| Err(AppError::Cancelled),
-        )
-        .unwrap_err();
+        let err = copy_dir_with_progress(&src, &dst, &mut |_| {}, &|| Err(AppError::Cancelled))
+            .unwrap_err();
         assert!(matches!(err, AppError::Cancelled));
     }
 

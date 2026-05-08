@@ -16,10 +16,8 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|e| {
-            eprintln!("background task failed: {e}");
-            AppError::Internal("background task failed".into())
-        })?
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| {
+        eprintln!("background task failed: {e}");
+        AppError::Internal("background task failed".into())
+    })?
 }

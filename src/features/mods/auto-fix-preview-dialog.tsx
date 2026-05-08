@@ -1,5 +1,10 @@
 import { useState } from "react";
 import {
+  Sortable,
+  SortableItem,
+  SortableItemHandle,
+} from "@/components/reui/sortable";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -12,6 +17,7 @@ import {
 import { ScrollArea } from "@/components/cupertino/scroll-area";
 import { Textarea } from "@/components/cupertino/textarea";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/cupertino/button";
 import {
   IconAlertTriangle,
   IconArrowDown,
@@ -21,8 +27,10 @@ import {
   IconCircleOff,
   IconCloud,
   IconFolder,
+  IconGripVertical,
   IconInfoCircle,
   IconLock,
+  IconRefresh,
 } from "@tabler/icons-react";
 import type { ModId } from "@/lib/core-types";
 import type {
@@ -72,6 +80,11 @@ export function AutoFixPreviewDialog({
   isBusy,
 }: AutoFixPreviewDialogProps) {
   const [hintsText, setHintsText] = useState("");
+  // User-edited override over the auto-computed order. Null means "follow the
+  // recipe" — typing in the recipe textarea resets back to null so the planned
+  // order recomputes. Once the user drags a row, we capture the current order
+  // here and any further drags edit it directly.
+  const [userOrder, setUserOrder] = useState<ModId[] | null>(null);
 
   if (!open) {
     return (
@@ -92,12 +105,20 @@ export function AutoFixPreviewDialog({
     ? ({ kind: "legacy", hints: legacyHints } as const)
     : ({ kind: "recipe", recipe: parsed } as const);
 
-  const { plannedOrder, matched } = analyzeAndReorder(
+  const { plannedOrder: autoPlannedOrder, matched } = analyzeAndReorder(
     entries,
     modsById,
     workshopMap,
     reorderInput,
   );
+
+  // The order shown and applied. If the user dragged, their edits take over;
+  // otherwise we follow the analyzer.
+  const plannedOrder: ModId[] =
+    userOrder && userOrder.length === autoPlannedOrder.length
+      ? userOrder
+      : autoPlannedOrder;
+  const userEdited = userOrder !== null;
 
   const oldPositionById = new Map<ModId, number>();
   const lockedById = new Map<ModId, boolean>();
@@ -143,14 +164,31 @@ export function AutoFixPreviewDialog({
 
   const close = () => {
     setHintsText("");
+    setUserOrder(null);
     onOpenChange(false);
+  };
+
+  const handleSortableChange = (next: ModId[]) => {
+    // Refuse moves that would shift a locked entry. The reui Sortable's
+    // per-item `disabled` prop already blocks dragging the locked rows, but
+    // a keyboard reorder could still try to move them past each other.
+    const before = plannedOrder;
+    if (next.length !== before.length) return;
+    const lockedShifted = before.some(
+      (id, i) => lockedById.get(id) && id !== next[i],
+    );
+    if (lockedShifted) return;
+    setUserOrder(next);
   };
 
   return (
     <AlertDialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setHintsText("");
+        if (!next) {
+          setHintsText("");
+          setUserOrder(null);
+        }
         onOpenChange(next);
       }}
     >
@@ -164,11 +202,16 @@ export function AutoFixPreviewDialog({
             {lockedCount > 0
               ? ` ${lockedCount} locked stay in place.`
               : ""}{" "}
-            Equal-priority mods keep their existing relative order.
+            Equal-priority mods keep their existing relative order. Drag a row
+            on the right to override the planned order.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,22rem)_1fr]">
+        {/* Scrollable body — the dialog itself is height-bounded by
+            cupertino AlertDialogContent. This wrapper absorbs any overflow
+            from accordions, long mod lists, or pasted recipes. Header and
+            footer stay pinned outside this region. */}
+        <div className="-mx-4 grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-4 md:grid-cols-[minmax(0,22rem)_1fr]">
           {/* Left column — recipe input + diagnostics */}
           <div className="flex min-w-0 flex-col gap-2">
             <div className="space-y-1">
@@ -181,12 +224,22 @@ export function AutoFixPreviewDialog({
               <Textarea
                 id="auto-fix-hints"
                 value={hintsText}
-                onChange={(e) => setHintsText(e.target.value)}
+                onChange={(e) => {
+                  setHintsText(e.target.value);
+                  // Editing the recipe re-runs the analyzer; drop any manual
+                  // overrides so the user sees the fresh planned order.
+                  setUserOrder(null);
+                }}
                 rows={textareaRows}
                 placeholder={
                   "e.g.\nProMods Canada\nRealistic Brutal Weather\nSCS Trailer Pack"
                 }
-                className="font-mono text-[11px]"
+                /* `field-sizing-fixed` overrides the shadcn default
+                   `field-sizing-content`, which makes the textarea grow
+                   unboundedly with pasted content. With it fixed, `rows` and
+                   `max-h` constrain the height and the internal scrollbar
+                   kicks in for long recipes. */
+                className="field-sizing-fixed max-h-72 overflow-y-auto font-mono text-[11px]"
                 spellCheck={false}
               />
               <p className="text-[10px] text-muted-foreground">
@@ -310,17 +363,39 @@ export function AutoFixPreviewDialog({
             )}
           </div>
 
-          {/* Right column — planned order */}
-          <div className="overflow-hidden rounded-md border border-border">
-            <div className="grid grid-cols-[3rem_1fr_5rem_8rem_4.5rem] items-center gap-3 border-b border-border bg-muted/40 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              <span className="text-right">#</span>
-              <span>Mod</span>
-              <span>Source</span>
-              <span>Group</span>
-              <span className="text-right">Move</span>
+          {/* Right column — planned order. Drag a row by its grip to override
+              the analyzer's order; locked rows refuse drags. */}
+          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border">
+            <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5">
+              <div className="grid flex-1 grid-cols-[1.25rem_3rem_1fr_5rem_8rem_4.5rem] items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span />
+                <span className="text-right">#</span>
+                <span>Mod</span>
+                <span>Source</span>
+                <span>Group</span>
+                <span className="text-right">Move</span>
+              </div>
+              {userEdited && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-my-1 h-6 gap-1 px-1.5 text-[10px] uppercase tracking-wider"
+                  onClick={() => setUserOrder(null)}
+                  disabled={isBusy}
+                  title="Discard manual edits and re-run the analyzer"
+                >
+                  <IconRefresh className="size-3" />
+                  Reset
+                </Button>
+              )}
             </div>
             <ScrollArea className="h-[55vh]">
-              <ol className="divide-y divide-border">
+              <Sortable
+                value={plannedOrder}
+                getItemValue={(id) => id}
+                onValueChange={handleSortableChange}
+                render={<ol className="divide-y divide-border" />}
+              >
                 {plannedOrder.map((modId, newIdx) => {
                   const oldIdx = oldPositionById.get(modId);
                   const moved = oldIdx !== undefined && oldIdx !== newIdx;
@@ -334,73 +409,23 @@ export function AutoFixPreviewDialog({
                   const recipeLine = recipeLineByModId.get(modId);
                   const movedDelta =
                     moved && oldIdx !== undefined ? newIdx - oldIdx : 0;
-
                   return (
-                    <li
+                    <SortablePlannedRow
                       key={modId}
-                      className="grid grid-cols-[3rem_1fr_5rem_8rem_4.5rem] items-center gap-3 px-3 py-1.5 text-xs hover:bg-muted/30"
-                    >
-                      <span className="flex flex-col items-end text-right tabular-nums text-muted-foreground">
-                        <span>{newIdx + 1}</span>
-                        {recipeLine !== undefined && (
-                          <span className="text-[9px] font-medium text-sky-500">
-                            L{recipeLine + 1}
-                          </span>
-                        )}
-                      </span>
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        {locked && (
-                          <IconLock
-                            className="size-3 shrink-0 text-amber-500"
-                            aria-label="Locked"
-                          />
-                        )}
-                        <span
-                          className="truncate font-medium"
-                          title={displayName}
-                        >
-                          {displayName}
-                        </span>
-                      </div>
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {source === "workshop" ? (
-                          <>
-                            <IconCloud className="size-3" />
-                            Workshop
-                          </>
-                        ) : source === "local" ? (
-                          <>
-                            <IconFolder className="size-3" />
-                            Local
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </span>
-                      <span
-                        className="truncate text-muted-foreground"
-                        title={group.description}
-                      >
-                        {group.label}
-                      </span>
-                      <span className="flex items-center justify-end gap-1 tabular-nums text-muted-foreground">
-                        {moved &&
-                          (movedDelta < 0 ? (
-                            <>
-                              <IconArrowUp className="size-3 text-emerald-500" />
-                              {Math.abs(movedDelta)}
-                            </>
-                          ) : (
-                            <>
-                              <IconArrowDown className="size-3 text-sky-500" />
-                              {movedDelta}
-                            </>
-                          ))}
-                      </span>
-                    </li>
+                      modId={modId}
+                      newIdx={newIdx}
+                      recipeLine={recipeLine}
+                      locked={locked}
+                      displayName={displayName}
+                      source={source}
+                      groupLabel={group.label}
+                      groupDescription={group.description}
+                      moved={moved}
+                      movedDelta={movedDelta}
+                    />
                   );
                 })}
-              </ol>
+              </Sortable>
             </ScrollArea>
           </div>
         </div>
@@ -413,14 +438,122 @@ export function AutoFixPreviewDialog({
             onClick={() => {
               onApply(plannedOrder);
               setHintsText("");
+              setUserOrder(null);
             }}
-            disabled={isBusy || movedCount === 0}
+            disabled={isBusy || (movedCount === 0 && !userEdited)}
           >
             Apply
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+interface SortablePlannedRowProps {
+  modId: ModId;
+  newIdx: number;
+  recipeLine: number | undefined;
+  locked: boolean;
+  displayName: string;
+  source: FullModInfo["source"] | undefined;
+  groupLabel: string;
+  groupDescription: string;
+  moved: boolean;
+  movedDelta: number;
+}
+
+function SortablePlannedRow({
+  modId,
+  newIdx,
+  recipeLine,
+  locked,
+  displayName,
+  source,
+  groupLabel,
+  groupDescription,
+  moved,
+  movedDelta,
+}: SortablePlannedRowProps) {
+  return (
+    <SortableItem
+      value={modId}
+      disabled={locked}
+      render={<li />}
+      className="grid grid-cols-[1.75rem_3rem_1fr_5rem_8rem_4.5rem] items-center gap-3 px-3 py-1.5 text-xs hover:bg-muted/30"
+    >
+      <SortableItemHandle
+        cursor={false}
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={locked}
+            aria-label={
+              locked ? "Locked — cannot reorder" : "Drag to reorder"
+            }
+            title={locked ? "Locked — cannot reorder" : "Drag to reorder"}
+            className="size-7 touch-none cursor-grab active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+          />
+        }
+      >
+        <IconGripVertical className="size-3.5" />
+      </SortableItemHandle>
+      <span className="flex flex-col items-end text-right tabular-nums text-muted-foreground">
+        <span>{newIdx + 1}</span>
+        {recipeLine !== undefined && (
+          <span className="text-[9px] font-medium text-sky-500">
+            L{recipeLine + 1}
+          </span>
+        )}
+      </span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        {locked && (
+          <IconLock
+            className="size-3 shrink-0 text-amber-500"
+            aria-label="Locked"
+          />
+        )}
+        <span className="truncate font-medium" title={displayName}>
+          {displayName}
+        </span>
+      </div>
+      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        {source === "workshop" ? (
+          <>
+            <IconCloud className="size-3" />
+            Workshop
+          </>
+        ) : source === "local" ? (
+          <>
+            <IconFolder className="size-3" />
+            Local
+          </>
+        ) : (
+          "—"
+        )}
+      </span>
+      <span
+        className="truncate text-muted-foreground"
+        title={groupDescription}
+      >
+        {groupLabel}
+      </span>
+      <span className="flex items-center justify-end gap-1 tabular-nums text-muted-foreground">
+        {moved &&
+          (movedDelta < 0 ? (
+            <>
+              <IconArrowUp className="size-3 text-emerald-500" />
+              {Math.abs(movedDelta)}
+            </>
+          ) : (
+            <>
+              <IconArrowDown className="size-3 text-sky-500" />
+              {movedDelta}
+            </>
+          ))}
+      </span>
+    </SortableItem>
   );
 }
 
@@ -448,7 +581,7 @@ function Disclosure({
 }) {
   return (
     <details className="group mt-1.5 border-t border-border/60 pt-1.5">
-      <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+      <summary className="flex list-none items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
         <IconChevronDown className="size-3 transition-transform group-open:rotate-0 -rotate-90" />
         {summary}
       </summary>

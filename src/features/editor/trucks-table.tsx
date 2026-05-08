@@ -10,6 +10,7 @@ import { IconTool, IconGasStation, IconStar } from "@tabler/icons-react";
 import { useUpdateTruck, useUpdateAllTrucks } from "@/hooks/use-mutations";
 import type { TruckData } from "@/features/editor/types";
 import type { SavePath, TruckId } from "@/lib/core-types";
+import { parseLicensePlate } from "@/lib/license-plate";
 
 // SCS stores wear values as integers in 0..=WEAR_MAX. The UI rounds to a
 // 0..100 percent for badge thresholds so we don't dilute the column with
@@ -21,11 +22,16 @@ function wearPercent(raw: number): number {
 }
 
 function maxWear(truck: TruckData): number {
+  // Include wheels/tires — the in-game service screen also gates on these,
+  // so a "Damaged" truck whose only fault is a worn tire would otherwise read
+  // "Perfect" here while the game still recommends a service stop.
+  const wheelsMax = truck.wheels_wear.length > 0 ? Math.max(...truck.wheels_wear) : 0;
   return Math.max(
     truck.engine_wear,
     truck.transmission_wear,
     truck.cabin_wear,
     truck.chassis_wear,
+    wheelsMax,
   );
 }
 
@@ -105,9 +111,22 @@ function buildColumns(
     }),
     col.accessor("license_plate", {
       header: "Plate",
-      cell: ({ getValue }) => (
-        <span className="text-muted-foreground">{getValue() || "—"}</span>
-      ),
+      cell: ({ getValue }) => {
+        const parsed = parseLicensePlate(getValue());
+        if (!parsed?.text) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="font-mono text-foreground">{parsed.text}</span>
+            {parsed.state && (
+              <span className="text-[10px] uppercase tracking-wide">
+                {parsed.state}
+              </span>
+            )}
+          </span>
+        );
+      },
     }),
     col.display({
       id: "actions",

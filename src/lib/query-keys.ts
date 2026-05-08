@@ -10,6 +10,7 @@ export const queryKeys = {
   },
   saves: {
     data: (savePath: string) => ["saves", savePath] as const,
+    backups: (savePath: string) => ["saves", "backups", savePath] as const,
   },
   mods: {
     scan: (basePath: string) => ["mods", basePath] as const,

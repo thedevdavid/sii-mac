@@ -20,6 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { getVersion } from "@tauri-apps/api/app";
 import { useGameDetection } from "@/hooks/use-game-detection";
 import { useAllProfiles, useProfileDetail } from "@/hooks/use-profiles";
 import {
@@ -87,6 +89,11 @@ export function AppSidebar({
     useGameDetection();
   const { profilesByInstallation } = useAllProfiles(installations);
   const { data: profileDetail } = useProfileDetail(selectedProfile?.path);
+  const { data: appVersion } = useQuery({
+    queryKey: ["app-version"],
+    queryFn: getVersion,
+    staleTime: Infinity,
+  });
   const location = useLocation();
 
   const hasProfile = !!selectedProfile;
@@ -251,7 +258,7 @@ export function AppSidebar({
 
       <SidebarFooter>
         <p className="px-4 py-2 text-xs text-muted-foreground">
-          SII Mac v1.0.0
+          SII Mac{appVersion ? ` v${appVersion}` : ""}
         </p>
       </SidebarFooter>
     </Sidebar>

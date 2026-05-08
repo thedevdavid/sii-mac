@@ -298,15 +298,36 @@ export const ATS_CITIES: Record<string, { name: string; state: string; abbr: str
   sheridan: { name: "Sheridan", state: "Wyoming", abbr: "WY" },
 };
 
+/**
+ * SCS stores city names as `scs_token` values — packed 64-bit tokens that hold
+ * at most 12 base-37 chars, so any city ID longer than 12 chars (e.g.
+ * `san_francisco` → `san_francisc`, `coeur_d_alene` → `coeur_d_alen`) gets
+ * truncated in `garage.<id>`. Reverse-map every long key to its 12-char form so
+ * we can resolve the truncated IDs back to the canonical city.
+ */
+const TRUNCATED_CITY_INDEX: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const fullKey of Object.keys(ATS_CITIES)) {
+    if (fullKey.length > 12) {
+      out[fullKey.slice(0, 12)] = fullKey;
+    }
+  }
+  return out;
+})();
+
 /** Look up state info for a city. Falls back to title-cased ID for unmapped cities. */
 export function getCityInfo(cityId: string): { name: string; state: string; abbr: string } {
-  return (
-    ATS_CITIES[cityId] ?? {
-      name: cityId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      state: "Unknown",
-      abbr: "??",
-    }
-  );
+  const direct = ATS_CITIES[cityId];
+  if (direct) return direct;
+
+  const aliased = TRUNCATED_CITY_INDEX[cityId];
+  if (aliased) return ATS_CITIES[aliased];
+
+  return {
+    name: cityId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    state: "Unknown",
+    abbr: "??",
+  };
 }
 
 /** All unique state abbreviations, sorted. */

@@ -83,8 +83,12 @@ pub fn first_object_string_list(text: &str, field_name: &str) -> Vec<String> {
 }
 
 /// Parse a single-object SIIN document and extract the `active_mods` indexed
-/// array as `(id, display_name)` pairs in declaration order. Returns an empty
-/// vec on parse failure or if the document has no objects.
+/// array as `(id, display_name)` pairs in **display order** — first entry is
+/// the top of the in-game Mod Manager UI / highest priority. SCS stores the
+/// array inverted (`active_mods[N-1]` is top of UI), so this function reverses
+/// the on-disk order. Returns an empty vec on parse failure or if the document
+/// has no objects. See `crate::profile::mod_writer::read_active_mods` for the
+/// canonical doc on this convention.
 pub fn first_object_active_mods(text: &str) -> Vec<ModEntry> {
     let Ok(doc) = parse_siin(text) else {
         return Vec::new();
@@ -112,6 +116,6 @@ pub fn first_object_active_mods(text: &str) -> Vec<ModEntry> {
         };
         mods.push((idx, ModEntry { id, display_name }));
     }
-    mods.sort_by_key(|(idx, _)| *idx);
+    mods.sort_by_key(|(idx, _)| std::cmp::Reverse(*idx));
     mods.into_iter().map(|(_, m)| m).collect()
 }

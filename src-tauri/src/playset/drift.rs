@@ -40,9 +40,8 @@ pub fn compute_drift(
         .cloned()
         .collect();
 
-    let order_changed = missing_in_profile.is_empty()
-        && extra_in_profile.is_empty()
-        && enabled_ids != live_ids;
+    let order_changed =
+        missing_in_profile.is_empty() && extra_in_profile.is_empty() && enabled_ids != live_ids;
 
     let snapshot_drift = match snapshot {
         Some(snap) => snap != playset.entries.as_slice(),

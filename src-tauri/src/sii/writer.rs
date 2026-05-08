@@ -46,6 +46,9 @@ fn serialize_value(out: &mut String, value: &SiiValue) {
         }
         SiiValue::Token(s) => out.push_str(s),
         SiiValue::Integer(n) => out.push_str(&n.to_string()),
+        // Plain digits — never `<n>.0`. The game's save parser rejects the
+        // decimal-point form for u64 hash fields like `company_check_hash`.
+        SiiValue::UInt(n) => out.push_str(&n.to_string()),
         SiiValue::Float(f) => {
             // Use enough precision to round-trip
             if f.fract() == 0.0 {
@@ -201,8 +204,14 @@ mod tests {
         let input = "SiiNunit\n{\nv : .v {\n base_color: (&3e843090, &3e843090, &3e843090)\n flake_color: (1, &3f0559b4, &3f11ff2e)\n}\n\n}\n";
         let doc = parse_siin(input).unwrap();
         let out = serialize_siin(&doc);
-        assert!(out.contains("base_color: (&3e843090, &3e843090, &3e843090)"), "got: {out}");
-        assert!(out.contains("flake_color: (1, &3f0559b4, &3f11ff2e)"), "got: {out}");
+        assert!(
+            out.contains("base_color: (&3e843090, &3e843090, &3e843090)"),
+            "got: {out}"
+        );
+        assert!(
+            out.contains("flake_color: (1, &3f0559b4, &3f11ff2e)"),
+            "got: {out}"
+        );
     }
 
     /// Integer-valued vector components keep their integer form. SCS writes
@@ -264,6 +273,71 @@ mod tests {
         eprintln!("Round-trip: {} objects preserved", doc.objects.len());
     }
 
+    /// Strict text-level invariant: parsing the on-disk save and immediately
+    /// re-serializing it must produce byte-identical output. Anything else is
+    /// the corruption point — even one drifted character means the game's
+    /// parser may reject the rewritten save. On mismatch, dumps both halves to
+    /// `/tmp/sii_*.txt` and reports the first differing line.
+    ///
+    /// Run against a real save (decoded plaintext or the `.bak.original`
+    /// snapshot the writer captures before its first edit):
+    ///   SII_ROUNDTRIP_FILE=/path/to/game.sii.bak.original cargo test --lib \
+    ///       --release -- --ignored verify_save_text_lossless --nocapture
+    #[test]
+    #[ignore]
+    fn verify_save_text_lossless() {
+        let path = match std::env::var("SII_ROUNDTRIP_FILE") {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Skipping: set SII_ROUNDTRIP_FILE=/path/to/game.sii");
+                return;
+            }
+        };
+        let bytes = std::fs::read(&path).expect("read input");
+        let decoded = sii_decode::file_type::decode_until_siin(&bytes).expect("decode failed");
+        let original = String::from_utf8(decoded).expect("utf-8 from decoder");
+
+        let doc = parse_siin(&original).expect("parse failed");
+        let serialized = serialize_siin(&doc);
+
+        if original == serialized {
+            eprintln!("OK — {} bytes round-tripped byte-exact", original.len());
+            return;
+        }
+
+        std::fs::write("/tmp/sii_original.txt", &original).unwrap();
+        std::fs::write("/tmp/sii_serialized.txt", &serialized).unwrap();
+
+        let orig_lines: Vec<&str> = original.lines().collect();
+        let our_lines: Vec<&str> = serialized.lines().collect();
+        let mut first_diff = None;
+        for (i, (a, b)) in orig_lines.iter().zip(our_lines.iter()).enumerate() {
+            if a != b {
+                first_diff = Some(i);
+                break;
+            }
+        }
+        if first_diff.is_none() && orig_lines.len() != our_lines.len() {
+            first_diff = Some(orig_lines.len().min(our_lines.len()));
+        }
+        if let Some(i) = first_diff {
+            let lo = i.saturating_sub(2);
+            let hi = (i + 5).min(orig_lines.len()).min(our_lines.len());
+            eprintln!(
+                "First text drift at line {} (orig has {} lines, ours has {})",
+                i + 1,
+                orig_lines.len(),
+                our_lines.len()
+            );
+            for j in lo..hi {
+                let marker = if j == i { ">>" } else { "  " };
+                eprintln!("{marker} {:>4} orig: {:?}", j + 1, orig_lines.get(j));
+                eprintln!("{marker} {:>4} ours: {:?}", j + 1, our_lines.get(j));
+            }
+        }
+        panic!("text differs — see /tmp/sii_original.txt vs /tmp/sii_serialized.txt");
+    }
+
     /// Strong proof of non-destructive round-trip: every object class+id, every
     /// field name+value must survive the serialize → re-parse cycle byte-exact.
     /// Catches drift in floats, hex floats, integer vectors, escape sequences,
@@ -294,8 +368,7 @@ mod tests {
         eprintln!("Input format: {:?}", format);
         eprintln!("Input size:   {} bytes", bytes.len());
 
-        let decoded = sii_decode::file_type::decode_until_siin(&bytes)
-            .expect("decode failed");
+        let decoded = sii_decode::file_type::decode_until_siin(&bytes).expect("decode failed");
         let text = String::from_utf8(decoded).expect("utf-8 from decoder");
         let doc1 = parse_siin(&text).expect("parse #1");
         eprintln!("Objects:      {}", doc1.objects.len());

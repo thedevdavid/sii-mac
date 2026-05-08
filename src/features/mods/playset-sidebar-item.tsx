@@ -55,7 +55,7 @@ export function PlaysetSidebarItem({
       >
         {/* Body region — clicking here activates the playset. */}
         <div
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+          className="flex min-w-0 flex-1 items-center gap-2"
           onClick={onSelect}
           role="button"
           tabIndex={0}

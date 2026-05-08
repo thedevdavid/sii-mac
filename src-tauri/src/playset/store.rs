@@ -112,7 +112,9 @@ pub fn save_installation(
 }
 
 /// Placeholder for future migrations. Currently version 1 is the only version.
-fn migrate(envelope: StoreVersioned<InstallationPlaysets>) -> Result<InstallationPlaysets, AppError> {
+fn migrate(
+    envelope: StoreVersioned<InstallationPlaysets>,
+) -> Result<InstallationPlaysets, AppError> {
     match envelope.version {
         v if v == CURRENT_SCHEMA_VERSION => Ok(envelope.data),
         v if v < CURRENT_SCHEMA_VERSION => {

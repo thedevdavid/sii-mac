@@ -148,6 +148,76 @@ fn looks_like_steam_cloud_path(path: &str) -> bool {
 }
 
 #[tauri::command]
+pub fn delete_backup(backup_path: String) -> Result<(), AppError> {
+    let path = PathBuf::from(&backup_path);
+    if !path.exists() {
+        return Err(AppError::NotFound(format!(
+            "Backup not found: {backup_path}"
+        )));
+    }
+    // Refuse to delete anything that isn't recognisably one of our backup
+    // directories — the metadata sidecar is the marker. Without this guard a
+    // mistyped path could nuke an arbitrary directory.
+    if !path.join(".backup_metadata.json").exists() {
+        return Err(AppError::InvalidPath(format!(
+            "Refusing to delete `{backup_path}`: not a SII Mac backup directory"
+        )));
+    }
+    fs::remove_dir_all(&path)?;
+    Ok(())
+}
+
+/// Apply a per-profile keep-N retention policy to the backup directory.
+///
+/// Returns the number of backups deleted. `keep_per_profile` is the cap on the
+/// number of newest backups to keep for each `profile_name`; older backups are
+/// removed. A `keep_per_profile` of 0 disables the policy (returns 0). We never
+/// touch directories without a `.backup_metadata.json` — they're either
+/// in-flight (`.staging`/`.restoring`) or someone else's data.
+#[tauri::command]
+pub fn cleanup_backups(
+    backup_dir: Option<String>,
+    keep_per_profile: usize,
+) -> Result<usize, AppError> {
+    if keep_per_profile == 0 {
+        return Ok(0);
+    }
+    let mut backups = list_backups(backup_dir)?;
+    // list_backups returns newest-first within the whole list; keep that order
+    // and group by profile so the cap applies per-profile rather than globally.
+    backups.sort_by(|a, b| {
+        a.profile_name
+            .cmp(&b.profile_name)
+            .then_with(|| b.created_at.cmp(&a.created_at))
+    });
+
+    let mut deleted = 0usize;
+    let mut current_profile: Option<String> = None;
+    let mut seen_for_profile = 0usize;
+    for backup in backups {
+        if current_profile.as_deref() != Some(backup.profile_name.as_str()) {
+            current_profile = Some(backup.profile_name.clone());
+            seen_for_profile = 0;
+        }
+        seen_for_profile += 1;
+        if seen_for_profile <= keep_per_profile {
+            continue;
+        }
+        // Same safety as `delete_backup`: only delete things with metadata.
+        let path = PathBuf::from(&backup.path);
+        if !path.join(".backup_metadata.json").exists() {
+            continue;
+        }
+        if let Err(e) = fs::remove_dir_all(&path) {
+            crate::warn_fallback!("cleanup_backups: failed to remove {}: {e}", path.display());
+            continue;
+        }
+        deleted += 1;
+    }
+    Ok(deleted)
+}
+
+#[tauri::command]
 pub fn list_backups(backup_dir: Option<String>) -> Result<Vec<BackupInfo>, AppError> {
     let backup_base = backup_dir
         .map(PathBuf::from)
@@ -211,6 +281,7 @@ pub fn restore_backup(
     cancel_registry: tauri::State<'_, CancelRegistry>,
     backup_path: String,
     profiles_dir: String,
+    overwrite: bool,
     job_id: String,
     progress: Channel<ProgressEvent>,
 ) -> Result<String, AppError> {
@@ -218,6 +289,9 @@ pub fn restore_backup(
     let mut emitter = ProgressEmitter::new(progress).with_cancel_flag(guard.flag());
 
     let mut staging: Option<PathBuf> = None;
+    // Outer-scope so the error path can roll the stash back into place if
+    // staging blew up after we'd already moved the live profile aside.
+    let mut replaced_stash: Option<(PathBuf, PathBuf)> = None;
 
     let result = (|| -> Result<String, AppError> {
         let source = Path::new(&backup_path);
@@ -272,10 +346,20 @@ pub fn restore_backup(
         let dir_name = crate::profile::manager::encode_profile_name(profile_name);
         let dest = dest_dir.join(&dir_name);
 
+        // Stash the existing profile under `<dir>.replaced-<ts>` instead of
+        // deleting it. The user has already been warned in the UI; keeping a
+        // copy on disk gives them an in-place undo without us having to wire
+        // the writer's `.bak.original` mechanism into the profile layout.
         if dest.exists() {
-            return Err(AppError::AlreadyExists(format!(
-                "Profile '{profile_name}' already exists at destination"
-            )));
+            if !overwrite {
+                return Err(AppError::AlreadyExists(format!(
+                    "Profile '{profile_name}' already exists at destination"
+                )));
+            }
+            let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S");
+            let stash = dest_dir.join(format!("{dir_name}.replaced-{ts}"));
+            fs::rename(&dest, &stash)?;
+            replaced_stash = Some((stash, dest.clone()));
         }
 
         // Stage into a sibling `.restoring` dir so a cancel / IO error during
@@ -319,6 +403,9 @@ pub fn restore_backup(
 
         fs::rename(&staging_path, &dest)?;
         staging = None;
+        // Restore succeeded; from here on we keep the `.replaced-<ts>` stash
+        // around as a manual undo path. Caller can delete it later.
+        let _ = replaced_stash.take();
 
         Ok(dest.to_string_lossy().to_string())
     })();
@@ -326,6 +413,13 @@ pub fn restore_backup(
     if result.is_err() {
         if let Some(staging_path) = staging {
             cleanup_staging(&staging_path);
+        }
+        // Failed mid-restore: put the original profile back where it was so
+        // the user isn't left with neither old nor new.
+        if let Some((stash, original_dest)) = replaced_stash {
+            if !original_dest.exists() {
+                let _ = fs::rename(&stash, &original_dest);
+            }
         }
     }
 
@@ -377,9 +471,7 @@ fn detect_game_from_path(path: &str) -> &'static str {
         }
     }
 
-    crate::warn_fallback!(
-        "detect_game_from_path: no game marker in `{path}` — defaulting to ats"
-    );
+    crate::warn_fallback!("detect_game_from_path: no game marker in `{path}` — defaulting to ats");
     "ats"
 }
 
@@ -428,10 +520,7 @@ mod tests {
             detect_game_from_path("/home/u/Games/EURO TRUCK SIMULATOR 2/profiles/54"),
             "ets2"
         );
-        assert_eq!(
-            detect_game_from_path("/home/u/ETS2/profiles/54"),
-            "ets2"
-        );
+        assert_eq!(detect_game_from_path("/home/u/ETS2/profiles/54"), "ets2");
         assert_eq!(
             detect_game_from_path("/Users/x/Documents/American Truck Simulator/profiles/54"),
             "ats"

@@ -161,6 +161,11 @@ fn extract_indexed_u64_array(obj: &SiiObject, name: &str, len: usize) -> Vec<u64
     out
 }
 
+/// Extract `active_mods[]` from a profile object in **display order** — i.e.
+/// first entry is the top of the in-game Mod Manager UI / highest priority.
+/// SCS stores the array inverted (highest index = top of UI), so this
+/// function reverses the on-disk order. See `mod_writer::read_active_mods`
+/// for the canonical doc on this convention.
 pub(crate) fn extract_active_mods_from_obj(obj: &SiiObject) -> Vec<ModEntry> {
     let mut mods: Vec<(usize, ModEntry)> = Vec::new();
     for field in &obj.fields {
@@ -182,7 +187,7 @@ pub(crate) fn extract_active_mods_from_obj(obj: &SiiObject) -> Vec<ModEntry> {
         };
         mods.push((idx, ModEntry { id, display_name }));
     }
-    mods.sort_by_key(|(idx, _)| *idx);
+    mods.sort_by_key(|(idx, _)| std::cmp::Reverse(*idx));
     mods.into_iter().map(|(_, m)| m).collect()
 }
 
@@ -257,12 +262,17 @@ profile_save : .profile {
     }
 
     #[test]
-    fn test_active_mods_preserves_order() {
+    fn test_active_mods_returned_in_display_order() {
+        // SCS stores active_mods inverted vs the in-game UI:
+        // active_mods[0] is the BOTTOM of the UI / lowest priority,
+        // active_mods[N-1] is the TOP / highest priority.
+        // Our reader returns display order — top first — so the SAMPLE's
+        // active_mods[1]="mod_two" (top of UI) comes first in the Vec.
         let f = extract_all_profile_fields(SAMPLE);
         assert_eq!(f.active_mods.len(), 2);
-        assert_eq!(f.active_mods[0].id, "mod_one");
-        assert_eq!(f.active_mods[0].display_name, "Mod One");
-        assert_eq!(f.active_mods[1].id, "mod_two");
+        assert_eq!(f.active_mods[0].id, "mod_two");
+        assert_eq!(f.active_mods[0].display_name, "Mod Two");
+        assert_eq!(f.active_mods[1].id, "mod_one");
     }
 
     #[test]

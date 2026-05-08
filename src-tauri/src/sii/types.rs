@@ -36,8 +36,15 @@ pub enum SiiValue {
     String(std::string::String),
     /// Unquoted token/reference: `vehicle.storage.abc`, `true`, `nil`, `owner`
     Token(std::string::String),
-    /// Integer number: `42`, `-1`
+    /// Integer number: `42`, `-1`. Use this for any value that fits `i64`.
     Integer(i64),
+    /// Unsigned-integer number that overflows `i64` but fits `u64`. ATS uses
+    /// 64-bit hashes (e.g. `company_check_hash`) that exceed `i64::MAX`. The
+    /// game's parser rejects decimal-point syntax for these fields, so the
+    /// writer emits them as plain digits — never as `<n>.0`. Without this
+    /// variant the parser would fall back to `Float` and lose precision
+    /// (f64 mantissa is 52 bits — can't represent integers ≥ 2^53 exactly).
+    UInt(u64),
     /// Float number: `0.75`. Decimal-formatted floats are stored here.
     Float(f64),
     /// IEEE-754 f32 bit pattern: `&3f400000`. SCS uses this hex form for any
@@ -70,7 +77,10 @@ impl SiiDocument {
     pub fn push_object(&mut self, obj: SiiObject) {
         let idx = self.objects.len();
         self.by_id.insert(obj.id.clone(), idx);
-        self.by_class.entry(obj.class.clone()).or_default().push(idx);
+        self.by_class
+            .entry(obj.class.clone())
+            .or_default()
+            .push(idx);
         self.objects.push(obj);
     }
 
@@ -149,10 +159,13 @@ impl SiiObject {
         }
     }
 
-    /// Get an integer field value.
+    /// Get an integer field value. Falls back to a lossy `u64 → i64` cast
+    /// for `UInt` fields; callers that need the full range should match on
+    /// `SiiValue` directly.
     pub fn get_int(&self, name: &str) -> Option<i64> {
         match self.get(name) {
             Some(SiiValue::Integer(n)) => Some(*n),
+            Some(SiiValue::UInt(n)) if *n <= i64::MAX as u64 => Some(*n as i64),
             _ => None,
         }
     }
@@ -163,6 +176,7 @@ impl SiiObject {
             Some(SiiValue::Float(n)) => Some(*n),
             Some(SiiValue::HexFloat(bits)) => Some(f32::from_bits(*bits) as f64),
             Some(SiiValue::Integer(n)) => Some(*n as f64),
+            Some(SiiValue::UInt(n)) => Some(*n as f64),
             _ => None,
         }
     }
@@ -262,7 +276,8 @@ mod tests {
         let target = doc.find_by_id_mut("vehicle.a").expect("should find");
         target.set("fuel_relative", SiiValue::Float(0.5));
         assert_eq!(
-            doc.find_by_id("vehicle.a").and_then(|o| o.get_float("fuel_relative")),
+            doc.find_by_id("vehicle.a")
+                .and_then(|o| o.get_float("fuel_relative")),
             Some(0.5)
         );
     }

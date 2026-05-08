@@ -95,7 +95,7 @@ export function DataTable<TData>({
                     key={header.id}
                     className={
                       header.column.getCanSort()
-                        ? "cursor-pointer select-none"
+                        ? "select-none"
                         : ""
                     }
                     onClick={header.column.getToggleSortingHandler()}
@@ -121,7 +121,7 @@ export function DataTable<TData>({
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  className={onRowClick ? "cursor-pointer" : ""}
+                  className={onRowClick ? "" : ""}
                   onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (

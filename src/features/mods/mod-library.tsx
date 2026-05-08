@@ -169,7 +169,7 @@ export function ModLibrary({
             />
             <Label
               htmlFor="hide-added"
-              className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
             >
               Hide added
             </Label>

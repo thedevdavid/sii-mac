@@ -3,8 +3,7 @@
 
 use crate::error::AppError;
 use crate::playset::{
-    io,
-    manager,
+    io, manager,
     models::{DriftReport, Playset, PlaysetMetadataPatch},
 };
 

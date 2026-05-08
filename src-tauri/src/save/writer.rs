@@ -21,20 +21,42 @@ use crate::utils::atomic_replace_verified;
 /// shared mutable state between commands and guarantees that every write sees
 /// a consistent on-disk view, including changes made by the game itself between
 /// edits. The write path is atomic (see `write_save`).
+///
+/// **Format strategy.** `read_save_document` returns the source format
+/// (Plaintext / Encrypted ScsC / Binary BSII / Obfuscated 3nK), but we
+/// intentionally drop it on the floor here — see [`write_save`] for the why.
 fn with_save_doc<F>(save_path: &str, f: F) -> Result<(), AppError>
 where
     F: FnOnce(&mut SiiDocument) -> Result<(), AppError>,
 {
-    let (mut doc, _format) = read_save_document(save_path)?;
+    let (mut doc, _source_format) = read_save_document(save_path)?;
     f(&mut doc)?;
     write_save(save_path, &doc)
 }
 
 /// Write a modified SiiDocument back to disk as plaintext SiiNunit.
 ///
+/// **Why plaintext, even when the source was encrypted/binary.** ATS/ETS2
+/// accept any of the four save formats on load (`g_save_format=2` in `config.cfg`
+/// makes the game itself emit plaintext SiiN), and re-encrypt back to the user's
+/// configured native format on the next in-game save. The reference open-source
+/// editor `CoffeSiberian/truck-tools` (Tauri+Rust+React, same stack) ships the
+/// same plaintext-only writer for exactly this reason — neither it nor any
+/// public Rust crate ships a ScsC encryptor or BSII writer (`sii-decode-rs`,
+/// `decrypt_truck`, and `TheLazyTomcat/SII_Decrypt` are all decode-only).
+/// Rebuilding ScsC requires the public AES key + HMAC + zlib pipeline; BSII has
+/// no public spec at all. Plaintext output sidesteps both. The temporary on-disk
+/// size jump (e.g. 530 KB ScsC → 6 MB SiiN) lasts only until the game's next
+/// autosave, which restores the native format.
+///
+/// **`info.sii` is never touched.** The game owns it and rewrites it atomically
+/// alongside `game.sii` on its next save. truck-tools follows the same rule.
+///
 /// Uses [`atomic_replace_verified`] so the live `game.sii` only changes after
-/// the new content has been fsync'd and re-parsed successfully. A `.bak`
-/// snapshot of the previous file is kept for quick recovery.
+/// the new content has been fsync'd and re-parsed successfully. A rotating
+/// `.bak` snapshot is kept for "undo last edit"; a sticky `.bak.original`
+/// is created on the very first edit and never overwritten (see
+/// `crate::utils::atomic_replace_verified`).
 fn write_save(save_path: &str, doc: &SiiDocument) -> Result<(), AppError> {
     let dir = Path::new(save_path);
     let game_sii = dir.join("game.sii");
@@ -86,10 +108,14 @@ fn repair_trailer_obj(obj: &mut SiiObject) {
 }
 
 fn zero_indexed_fields(obj: &mut SiiObject, name: &str) {
+    set_indexed_fields(obj, name, 0);
+}
+
+fn set_indexed_fields(obj: &mut SiiObject, name: &str, value: i64) {
     let prefix = format!("{}[", name);
     for field in &mut obj.fields {
         if field.name.starts_with(&prefix) {
-            field.value = SiiValue::Integer(0);
+            field.value = SiiValue::Integer(value);
         }
     }
 }
@@ -146,6 +172,9 @@ pub fn update_truck(
             if let Some(v) = changes.chassis_wear {
                 obj.set("chassis_wear", SiiValue::Integer(v));
             }
+            if let Some(v) = changes.wheels_wear {
+                set_indexed_fields(obj, "wheels_wear", v);
+            }
         }
 
         if changes.refuel == Some(true) {
@@ -163,7 +192,7 @@ pub fn update_truck(
 }
 
 pub fn update_all_trucks(save_path: &str, action: &BulkAction) -> Result<usize, AppError> {
-    let (mut doc, _format) = read_save_document(save_path)?;
+    let (mut doc, _source_format) = read_save_document(save_path)?;
     let mut count = 0;
 
     for obj in &mut doc.objects {
@@ -213,7 +242,7 @@ pub fn update_trailer(
 }
 
 pub fn update_all_trailers(save_path: &str) -> Result<usize, AppError> {
-    let (mut doc, _format) = read_save_document(save_path)?;
+    let (mut doc, _source_format) = read_save_document(save_path)?;
     let mut count = 0;
 
     for obj in &mut doc.objects {
@@ -242,7 +271,7 @@ pub fn update_garage(
 }
 
 pub fn unlock_all_garages(save_path: &str) -> Result<usize, AppError> {
-    let (mut doc, _format) = read_save_document(save_path)?;
+    let (mut doc, _source_format) = read_save_document(save_path)?;
     let mut count = 0;
     let tiny_raw = GarageStatus::Tiny.to_raw();
     let not_owned_raw = GarageStatus::NotOwned.to_raw();
@@ -445,6 +474,7 @@ garage : garage.reno {
                 transmission_wear: None,
                 cabin_wear: None,
                 chassis_wear: None,
+                wheels_wear: None,
                 license_plate: Some(r#"ABC"X"#.to_string()),
                 repair: None,
                 refuel: None,
@@ -527,6 +557,7 @@ garage : garage.reno {
                 transmission_wear: None,
                 cabin_wear: None,
                 chassis_wear: None,
+                wheels_wear: None,
                 license_plate: Some("NEW".into()),
                 repair: None,
                 refuel: None,
@@ -572,5 +603,60 @@ bank : bank.1 {
             }
             other => panic!("expected SiiDecode, got {other:?}"),
         }
+    }
+
+    /// Regression for the plaintext-only writer contract documented on
+    /// `write_save`. Any code that tries to "preserve source format" without
+    /// shipping a real ScsC/BSII encoder must not silently break this guarantee.
+    /// The on-disk output after `with_save_doc` MUST begin with the `SiiNunit`
+    /// magic header and parse back to a structurally-equivalent document.
+    /// Also asserts `info.sii` is left untouched — the game owns it.
+    #[test]
+    fn test_writer_always_emits_plaintext_siin_and_does_not_touch_info_sii() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_sample_game_sii(dir, SAMPLE_GAME_SII);
+        // Pretend the game wrote a binary info.sii alongside (real saves do).
+        // We use ScsC magic bytes so the test fails loudly if the writer ever
+        // starts rewriting info.sii — the bytes after the magic are intentional
+        // garbage and would fail any decode attempt.
+        let info_path = dir.join("info.sii");
+        let info_bytes: Vec<u8> = b"ScsC\x00\x01\x02\x03not-real-info-sii".to_vec();
+        std::fs::write(&info_path, &info_bytes).unwrap();
+        let info_mtime_before = std::fs::metadata(&info_path).unwrap().modified().unwrap();
+
+        let save_path = dir.to_string_lossy().to_string();
+        update_player(
+            &save_path,
+            &PlayerChanges {
+                money: Some(1_234_567),
+                experience: None,
+            },
+        )
+        .unwrap();
+
+        // 1. game.sii is plaintext SiiN — magic header preserved.
+        let game_bytes = std::fs::read(dir.join("game.sii")).unwrap();
+        assert!(
+            game_bytes.starts_with(b"SiiNunit"),
+            "writer must emit plaintext SiiN; got first 16 bytes = {:?}",
+            &game_bytes[..16.min(game_bytes.len())]
+        );
+
+        // 2. game.sii reparses cleanly with the money mutation applied.
+        let saved = crate::save::reader::read_save(&save_path).unwrap();
+        assert_eq!(saved.bank.money_account, 1_234_567);
+
+        // 3. info.sii is byte-identical to what we wrote (never touched).
+        let info_after = std::fs::read(&info_path).unwrap();
+        assert_eq!(
+            info_after, info_bytes,
+            "info.sii content must not be modified by the writer"
+        );
+        let info_mtime_after = std::fs::metadata(&info_path).unwrap().modified().unwrap();
+        assert_eq!(
+            info_mtime_after, info_mtime_before,
+            "info.sii mtime must not be touched by the writer"
+        );
     }
 }

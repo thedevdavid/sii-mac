@@ -107,7 +107,7 @@ export function ItemRow({
       />
       <Label
         htmlFor={checkboxId}
-        className="min-w-0 flex-1 cursor-pointer text-sm font-normal"
+        className="min-w-0 flex-1 text-sm font-normal"
       >
         <span className="truncate">{label}</span>
         {subtitle && (

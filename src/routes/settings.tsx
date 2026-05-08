@@ -27,9 +27,13 @@ import {
 } from "@/components/ui/item";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useAutoFixMode } from "@/hooks/use-autofix-mode";
-import { IconFolderPlus, IconTrash, IconRefresh } from "@tabler/icons-react";
+import { useBackupRetention } from "@/hooks/use-backup-retention";
+import { cleanupBackups } from "@/lib/tauri-commands";
+import { IconFolderPlus, IconTrash, IconRefresh, IconClearAll } from "@tabler/icons-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -43,6 +47,12 @@ function SettingsPage() {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [autoFixMode, setAutoFixMode] = useAutoFixMode();
+  const [backupKeep, setBackupKeep] = useBackupRetention();
+  const { data: appVersion } = useQuery({
+    queryKey: ["app-version"],
+    queryFn: getVersion,
+    staleTime: Infinity,
+  });
 
   const [vibrancyMode, setVibrancyMode] = React.useState<"css" | "native">(
     () =>
@@ -236,6 +246,74 @@ function SettingsPage() {
           </ItemGroup>
         </div>
 
+        {/* Backups */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Backups
+          </h3>
+          <ItemGroup>
+            <Item variant="outline">
+              <ItemContent>
+                <ItemTitle>Auto-cleanup</ItemTitle>
+                <ItemDescription>
+                  After every new backup, keep only the N most recent
+                  backups per profile and delete the rest. Set to "Keep all"
+                  to disable.
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <NativeSelect
+                  value={String(backupKeep)}
+                  onChange={(e) => setBackupKeep(Number(e.target.value))}
+                  className="w-44"
+                >
+                  <option value="0">Keep all</option>
+                  <option value="3">Keep 3 newest</option>
+                  <option value="5">Keep 5 newest</option>
+                  <option value="10">Keep 10 newest</option>
+                  <option value="20">Keep 20 newest</option>
+                </NativeSelect>
+              </ItemActions>
+            </Item>
+            <Item variant="outline">
+              <ItemContent>
+                <ItemTitle>Run cleanup now</ItemTitle>
+                <ItemDescription>
+                  Apply the current retention policy immediately. Older
+                  backups beyond the limit are permanently deleted.
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending || backupKeep === 0}
+                  onClick={() => {
+                    startTransition(async () => {
+                      try {
+                        const removed = await cleanupBackups(backupKeep);
+                        toast.success(
+                          removed === 0
+                            ? "Nothing to clean up"
+                            : `Removed ${removed} older backup${removed === 1 ? "" : "s"}`,
+                        );
+                        await queryClient.invalidateQueries({
+                          queryKey: queryKeys.backups.all(),
+                        });
+                      } catch (err) {
+                        toast.error(`Cleanup failed: ${formatError(err)}`);
+                      }
+                    });
+                  }}
+                >
+                  <IconClearAll className="size-3.5" />
+                  Clean up
+                </Button>
+              </ItemActions>
+            </Item>
+          </ItemGroup>
+        </div>
+
         {/* Game Config */}
         {selectedInstallation && (
           <ConfigEditor gameBasePath={selectedInstallation.base_path} />
@@ -251,7 +329,7 @@ function SettingsPage() {
               <ItemContent>
                 <ItemTitle>Check for Updates</ItemTitle>
                 <ItemDescription>
-                  Current version: v1.0.0
+                  {appVersion ? `Current version: v${appVersion}` : "Loading version…"}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>

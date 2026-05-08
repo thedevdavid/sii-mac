@@ -13,7 +13,8 @@ use serde_json::Value;
 
 use crate::error::AppError;
 
-const ENDPOINT: &str = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
+const ENDPOINT: &str =
+    "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
 const BATCH_SIZE: usize = 100;
 const REQUEST_TIMEOUT_SECS: u64 = 20;
 
@@ -129,9 +130,10 @@ fn parse_single_detail(entry: &Value) -> Option<WorkshopMetadata> {
         .unwrap_or_default();
 
     // file_size can come as either a number or a string. Be defensive.
-    let file_size = entry
-        .get("file_size")
-        .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+    let file_size = entry.get("file_size").and_then(|v| {
+        v.as_u64()
+            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+    });
 
     let subscribers = entry.get("subscriptions").and_then(|v| v.as_u64());
     let time_updated = entry.get("time_updated").and_then(|v| v.as_u64());
@@ -219,7 +221,10 @@ mod tests {
         assert_eq!(m.workshop_id, "123456789");
         assert_eq!(m.title, "Test Mod");
         assert_eq!(m.description, "A cool mod");
-        assert_eq!(m.preview_url.as_deref(), Some("https://example.com/preview.jpg"));
+        assert_eq!(
+            m.preview_url.as_deref(),
+            Some("https://example.com/preview.jpg")
+        );
         assert_eq!(m.file_size, Some(1048576));
         assert_eq!(m.subscribers, Some(42));
         assert_eq!(m.time_updated, Some(1700000000));

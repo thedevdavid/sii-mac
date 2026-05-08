@@ -544,7 +544,7 @@ function CloneForm({
                                 />
                                 <Label
                                   htmlFor={checkboxId}
-                                  className="min-w-0 flex-1 cursor-pointer truncate text-sm font-normal"
+                                  className="min-w-0 flex-1 truncate text-sm font-normal"
                                 >
                                   {mod.display_name}
                                 </Label>

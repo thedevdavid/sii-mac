@@ -12,7 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@/components/cupertino/empty";
 import {
   Item,
   ItemGroup,
@@ -38,12 +38,17 @@ import {
   IconRotate,
   IconPlus,
   IconLoader2,
+  IconFolderOpen,
+  IconTrash,
 } from "@tabler/icons-react";
 import {
   listBackups,
   backupProfile,
   restoreBackup,
+  deleteBackup,
+  cleanupBackups,
 } from "@/lib/tauri-commands";
+import { getBackupRetention } from "@/hooks/use-backup-retention";
 import { revealInFinder } from "@/lib/opener";
 import { useProgressStream } from "@/hooks/use-progress-stream";
 import { ProgressOverlay } from "@/components/progress-overlay";
@@ -80,6 +85,19 @@ export function ProfileBackups({
     startTransition(async () => {
       try {
         await backupProfile(profile.path, undefined, jobId, channel);
+        const keep = getBackupRetention();
+        if (keep > 0) {
+          try {
+            const removed = await cleanupBackups(keep);
+            if (removed > 0) {
+              toast.info(
+                `Removed ${removed} older backup${removed === 1 ? "" : "s"} (keeping ${keep} per profile)`,
+              );
+            }
+          } catch (err) {
+            toast.error(`Auto-cleanup failed: ${formatError(err)}`);
+          }
+        }
         await queryClient.invalidateQueries({ queryKey: queryKeys.backups.all() });
       } catch (err) {
         if (progressStream.getStatus() === "idle") {
@@ -89,15 +107,38 @@ export function ProfileBackups({
     });
   }
 
-  function handleRestore(backupPath: BackupPath, backupName: string) {
+  function handleDelete(backupPath: BackupPath, backupName: string) {
+    startTransition(async () => {
+      try {
+        await deleteBackup(backupPath);
+        toast.success(`Backup "${backupName}" deleted`);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.backups.all() });
+      } catch (err) {
+        toast.error(`Delete failed: ${formatError(err)}`);
+      }
+    });
+  }
+
+  function handleRestore(
+    backupPath: BackupPath,
+    backupName: string,
+    overwrite: boolean,
+  ) {
     const { jobId, channel } = progressStream.begin();
     startTransition(async () => {
       try {
-        await restoreBackup(backupPath, installation.profiles_path, jobId, channel);
-        toast.success(`Backup "${backupName}" restored`, {
-          description:
-            "The profile has been restored. Switch to it using the profile selector.",
-        });
+        await restoreBackup(
+          backupPath,
+          installation.profiles_path,
+          overwrite,
+          jobId,
+          channel,
+        );
+        toast.success(
+          overwrite
+            ? `Profile "${backupName}" restored from backup`
+            : `Backup "${backupName}" restored as a new profile`,
+        );
         await queryClient.invalidateQueries({
           queryKey: queryKeys.profiles.list(installation.profiles_path),
         });
@@ -148,12 +189,7 @@ export function ProfileBackups({
           {profileBackups && profileBackups.length > 0 ? (
             <ItemGroup>
               {profileBackups.map((backup) => (
-                <Item
-                  key={backup.path}
-                  variant="outline"
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => revealInFinder(backup.path)}
-                >
+                <Item key={backup.path} variant="outline">
                   <ItemMedia variant="icon">
                     <IconArchive className="size-4 text-muted-foreground" />
                   </ItemMedia>
@@ -164,11 +200,25 @@ export function ProfileBackups({
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => revealInFinder(backup.path)}
+                      aria-label="Reveal in Finder"
+                    >
+                      <IconFolderOpen className="size-3.5" />
+                    </Button>
                     <RestoreDialog
                       backupPath={backup.path}
                       backupName={backup.profile_name}
                       isPending={isPending}
                       onRestore={handleRestore}
+                    />
+                    <DeleteBackupDialog
+                      backupPath={backup.path}
+                      backupName={backup.profile_name}
+                      isPending={isPending}
+                      onDelete={handleDelete}
                     />
                   </ItemActions>
                 </Item>
@@ -195,12 +245,7 @@ export function ProfileBackups({
             </h3>
             <ItemGroup>
               {otherBackups.map((backup) => (
-                <Item
-                  key={backup.path}
-                  variant="outline"
-                  className="cursor-pointer opacity-75 hover:bg-muted/50"
-                  onClick={() => revealInFinder(backup.path)}
-                >
+                <Item key={backup.path} variant="outline" className="opacity-75">
                   <ItemMedia variant="icon">
                     <IconArchive className="size-4 text-muted-foreground" />
                   </ItemMedia>
@@ -216,11 +261,25 @@ export function ProfileBackups({
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => revealInFinder(backup.path)}
+                      aria-label="Reveal in Finder"
+                    >
+                      <IconFolderOpen className="size-3.5" />
+                    </Button>
                     <RestoreDialog
                       backupPath={backup.path}
                       backupName={backup.profile_name}
                       isPending={isPending}
                       onRestore={handleRestore}
+                    />
+                    <DeleteBackupDialog
+                      backupPath={backup.path}
+                      backupName={backup.profile_name}
+                      isPending={isPending}
+                      onDelete={handleDelete}
                     />
                   </ItemActions>
                 </Item>
@@ -242,7 +301,7 @@ function RestoreDialog({
   backupPath: BackupPath;
   backupName: string;
   isPending: boolean;
-  onRestore: (path: BackupPath, name: string) => void;
+  onRestore: (path: BackupPath, name: string, overwrite: boolean) => void;
 }) {
   return (
     <AlertDialog>
@@ -254,16 +313,65 @@ function RestoreDialog({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Restore Backup</AlertDialogTitle>
+          <AlertDialogTitle>Restore "{backupName}"?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will create a new profile from this backup. If a profile with
-            the same name already exists, the restore will fail.
+            This replaces the on-disk profile "{backupName}" with the contents
+            of this backup. Your current state for that profile will be moved
+            aside as <code>{backupName}.replaced-&lt;timestamp&gt;</code> so you
+            can roll back manually if needed.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => onRestore(backupPath, backupName)}>
+          <AlertDialogAction
+            onClick={() => onRestore(backupPath, backupName, true)}
+          >
             Restore
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DeleteBackupDialog({
+  backupPath,
+  backupName,
+  isPending,
+  onDelete,
+}: {
+  backupPath: BackupPath;
+  backupName: string;
+  isPending: boolean;
+  onDelete: (path: BackupPath, name: string) => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isPending}
+            aria-label={`Delete backup ${backupName}`}
+            className="text-destructive hover:text-destructive"
+          />
+        }
+      >
+        <IconTrash className="size-3.5" />
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this backup?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Permanently removes the backup folder for "{backupName}" from
+            disk. The on-disk profile is not affected. This can't be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => onDelete(backupPath, backupName)}>
+            Delete
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
