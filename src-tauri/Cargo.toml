@@ -13,7 +13,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+# `macos-private-api` pairs with `macOSPrivateApi: true` in tauri.macos.conf.json
+# and is enabled only on macOS (see the macOS target section below). Keeping it
+# on unconditionally makes the Tauri CLI rewrite this file to `features = []`
+# when building on Linux/Windows, where the base config doesn't set it.
+tauri = { version = "2", features = [] }
 dirs = "6"
 tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
@@ -36,6 +40,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 window-vibrancy = "0.6"
+# Cargo unions this with the base `tauri` dependency, so the feature is enabled
+# only on macOS — matching `macOSPrivateApi: true` in tauri.macos.conf.json.
+tauri = { version = "2", features = ["macos-private-api"] }
 
 [dev-dependencies]
 tempfile = "3"
