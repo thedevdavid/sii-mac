@@ -80,6 +80,20 @@ pub fn delete_local_mod(base_path: &str, mod_id: &str) -> Result<(), AppError> {
     )))
 }
 
+/// Resolve the local mod directory (`{base_path}/mod`), creating it if it does
+/// not already exist, and return its path as a string.
+///
+/// Used by the mod manager's "Open mods folder" action. A workshop-only or
+/// brand-new installation may not have a `mod/` directory yet, so we create it
+/// on demand — the point of opening the folder is usually to drop a local
+/// `.scs` mod into it, and opening a path the game manager expects to be there
+/// should not fail just because it hasn't been used yet.
+pub fn ensure_mod_dir(base_path: &str) -> Result<String, AppError> {
+    let mod_dir = Path::new(base_path).join("mod");
+    fs::create_dir_all(&mod_dir)?;
+    Ok(mod_dir.to_string_lossy().to_string())
+}
+
 // --- Internal helpers ---
 
 /// Read profile.sii, apply `f` to the decoded active_mods list, and write it
@@ -312,5 +326,21 @@ profile_save : .profile {
     fn test_delete_local_mod_rejects_workshop_ids() {
         let result = delete_local_mod("/tmp", "mod_workshop_package.123");
         assert!(matches!(result, Err(AppError::InvalidPath(_))));
+    }
+
+    #[test]
+    fn test_ensure_mod_dir_creates_missing_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().to_str().unwrap();
+        let expected = tmp.path().join("mod");
+        assert!(!expected.exists());
+
+        let returned = ensure_mod_dir(base).unwrap();
+        assert!(expected.is_dir(), "mod dir should have been created");
+        assert_eq!(returned, expected.to_string_lossy());
+
+        // Idempotent: calling again on an existing dir succeeds.
+        let again = ensure_mod_dir(base).unwrap();
+        assert_eq!(again, returned);
     }
 }
