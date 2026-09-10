@@ -431,6 +431,16 @@ export async function deleteLocalMod(
   await invoke("delete_local_mod", { basePath, modId });
 }
 
+/**
+ * Resolve the installation's local mod directory (`{base}/mod`), creating it
+ * if it doesn't exist yet, and return its path. The caller opens the returned
+ * path in the OS file manager.
+ */
+export async function ensureModsDir(basePath: GameBasePath): Promise<string> {
+  const raw = await invoke("ensure_mods_dir", { basePath });
+  return validateWithSchema(z.string(), "ensure_mods_dir", raw);
+}
+
 // --- Playset commands ---
 
 export async function listPlaysets(basePath: GameBasePath): Promise<Playset[]> {

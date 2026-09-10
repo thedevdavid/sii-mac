@@ -48,6 +48,7 @@ pub fn run() {
             commands::profiles::scan_installation_mods,
             commands::profiles::refresh_installation_mods,
             commands::profiles::delete_local_mod,
+            commands::profiles::ensure_mods_dir,
             commands::playsets::list_playsets,
             commands::playsets::get_playset,
             commands::playsets::get_active_playset,

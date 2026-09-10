@@ -168,6 +168,14 @@ pub async fn delete_local_mod(
     .await
 }
 
+/// Resolve the local mod directory for an installation, creating it if needed,
+/// and return its path. The frontend opens the returned path in the OS file
+/// manager (see the "Open mods folder" button in the mod manager).
+#[tauri::command]
+pub async fn ensure_mods_dir(base_path: String) -> Result<String, AppError> {
+    run_blocking(move || mod_writer::ensure_mod_dir(&base_path)).await
+}
+
 // --- Store helpers ---
 
 fn read_custom_paths(app_handle: &tauri::AppHandle) -> Result<Vec<String>, AppError> {

@@ -6,8 +6,9 @@ import { Checkbox } from "@/components/cupertino/checkbox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter";
-import { IconRefresh } from "@tabler/icons-react";
+import { IconFolderOpen, IconRefresh } from "@tabler/icons-react";
 import type { GameBasePath, ProfilePath } from "@/lib/core-types";
+import { openModsFolder } from "@/lib/opener";
 import type { FullModInfo, Playset, WorkshopMetadataMap } from "./types";
 import { ModLibraryRow } from "./mod-library-row";
 import {
@@ -123,20 +124,33 @@ export function ModLibrary({
               {filtered.length} of {allMods.length}
             </span>
           </h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending}
-            title="Rescan mod folder for files added or removed outside the app"
-          >
-            <IconRefresh
-              className={
-                refreshMutation.isPending ? "size-3.5 animate-spin" : "size-3.5"
-              }
-            />
-            Rescan
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openModsFolder(basePath)}
+              title="Open the local mods folder in your file manager"
+            >
+              <IconFolderOpen className="size-3.5" />
+              Open folder
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refreshMutation.mutate()}
+              disabled={refreshMutation.isPending}
+              title="Rescan mod folder for files added or removed outside the app"
+            >
+              <IconRefresh
+                className={
+                  refreshMutation.isPending
+                    ? "size-3.5 animate-spin"
+                    : "size-3.5"
+                }
+              />
+              Rescan
+            </Button>
+          </div>
         </div>
         <Input
           value={search}

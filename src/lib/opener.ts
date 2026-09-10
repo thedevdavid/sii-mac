@@ -1,6 +1,11 @@
 import { formatError } from "@/lib/format-error";
-import { WorkshopIdSchema, type WorkshopId } from "@/lib/core-types";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import {
+  WorkshopIdSchema,
+  type GameBasePath,
+  type WorkshopId,
+} from "@/lib/core-types";
+import { ensureModsDir } from "@/lib/tauri-commands";
+import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
 const WORKSHOP_PREFIX = "mod_workshop_package.";
@@ -25,5 +30,19 @@ export async function revealInFinder(path: string) {
     await revealItemInDir(path);
   } catch (err) {
     toast.error(`Could not open in Finder: ${formatError(err)}`);
+  }
+}
+
+/**
+ * Open the installation's local mods folder (`{base}/mod`) in the OS file
+ * manager, creating it first if it doesn't exist yet so a workshop-only or
+ * fresh installation can still open (and drop mods into) it.
+ */
+export async function openModsFolder(basePath: GameBasePath) {
+  try {
+    const dir = await ensureModsDir(basePath);
+    await openPath(dir);
+  } catch (err) {
+    toast.error(`Could not open mods folder: ${formatError(err)}`);
   }
 }
